@@ -1,4 +1,4 @@
-project.ext.set("flutter.skipBuildDependencyValidation", "true")plugins {
+plugins {
     id "com.android.application"
     id "kotlin-android"
     id "dev.flutter.flutter-gradle-plugin"
@@ -30,4 +30,12 @@ android {
             signingConfig signingConfigs.debug
         }
     }
+}
+
+flutter {
+    source '../..'
+}
+
+ext {
+    set("flutter.skipBuildDependencyValidation", "true")
 }
