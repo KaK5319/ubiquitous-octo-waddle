@@ -31,7 +31,3 @@ android {
         }
     }
 }
-
-flutter {
-    source '../..'
-}
