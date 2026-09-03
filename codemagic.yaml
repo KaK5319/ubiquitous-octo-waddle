@@ -9,7 +9,6 @@ workflows:
           echo "flutter.sdk=$HOME/programs/flutter" > android/local.properties
       - name: Build Android APK
         script: |
-          flutter clean
           flutter pub get
           flutter build apk --release --android-skip-build-dependency-validation
     artifacts:
