@@ -40,28 +40,37 @@ class _BookViewerPageState extends State<BookViewerPage> {
   String _loadingText = '';
 
   Future<void> _pickFile() async {
-    // FileType.any に変更してAndroidピッカーの不具合を回避
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.any,
-    );
+    try {
+      // withData: true でファイルを強制的にアプリ内キャッシュに一時保存させる
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        withData: true,
+      );
 
-    if (result != null && result.files.single.path != null) {
-      final path = result.files.single.path!;
-      final extension = p.extension(path).toLowerCase();
+      if (result != null && result.files.single.path != null) {
+        final path = result.files.single.path!;
+        final extension = p.extension(path).toLowerCase();
 
-      if (extension == '.pdf') {
-        setState(() {
-          _filePath = path;
-          _extractedImages = [];
-        });
-      } else if (extension == '.zip') {
-        await _extractZip(path);
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('PDFまたはZIPファイルを選択してください')),
-          );
+        if (extension == '.pdf') {
+          setState(() {
+            _filePath = path;
+            _extractedImages = [];
+          });
+        } else if (extension == '.zip') {
+          await _extractZip(path);
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('PDFまたはZIPファイルを選択してください')),
+            );
+          }
         }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('ファイル選択エラー: $e')),
+        );
       }
     }
   }
