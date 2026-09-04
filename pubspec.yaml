@@ -15,7 +15,6 @@ dependencies:
   archive: ^3.3.7
   path_provider: ^2.1.2
   path: ^1.9.0
-  unrar_flut: ^0.1.2
 
 dev_dependencies:
   flutter_test:
