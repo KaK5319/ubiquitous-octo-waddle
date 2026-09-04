@@ -15,7 +15,7 @@ dependencies:
   archive: ^3.3.7
   path_provider: ^2.1.2
   path: ^1.9.0
-  unrar_file: ^1.1.0
+  unrar: ^2.0.1
 
 dev_dependencies:
   flutter_test:
