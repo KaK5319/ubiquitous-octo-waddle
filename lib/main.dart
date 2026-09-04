@@ -136,7 +136,6 @@ class _BookViewerPageState extends State<BookViewerPage> {
       final outDir = Directory('${tempDir.path}/extracted_rar_${DateTime.now().millisecondsSinceEpoch}');
       await outDir.create(recursive: true);
 
-      // unrar_file を使って解凍
       await UnrarFile.extract_rar_to_target(rarPath, outDir.path);
 
       List<String> imagePaths = [];
