@@ -18,7 +18,7 @@ class SideBooksCloneApp extends StatelessWidget {
     return MaterialApp(
       title: 'SideBooks Clone',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.grey),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
       home: const BookViewerPage(),
@@ -40,9 +40,9 @@ class _BookViewerPageState extends State<BookViewerPage> {
   String _loadingText = '';
 
   Future<void> _pickFile() async {
+    // FileType.any に変更してAndroidピッカーの不具合を回避
     final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf', 'zip'],
+      type: FileType.any,
     );
 
     if (result != null && result.files.single.path != null) {
@@ -56,6 +56,12 @@ class _BookViewerPageState extends State<BookViewerPage> {
         });
       } else if (extension == '.zip') {
         await _extractZip(path);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('PDFまたはZIPファイルを選択してください')),
+          );
+        }
       }
     }
   }
@@ -80,9 +86,9 @@ class _BookViewerPageState extends State<BookViewerPage> {
         if (file.isFile) {
           final filename = file.name;
           final ext = p.extension(filename).toLowerCase();
-          if (['.jpg', '.jpeg', '.png', '.webp', '.gif'].contains(ext)) {
+          if (['.jpg', '.jpeg', '.png', '.webp'].contains(ext)) {
             final data = file.content as List<int>;
-            final outFile = File('${outDir.path}/${p.basename(filename)}');
+            final outFile = File('${outDir.path}/$filename');
             await outFile.writeAsBytes(data);
             imagePaths.add(outFile.path);
           }
