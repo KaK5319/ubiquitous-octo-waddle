@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:archive/archive.dart';
-import 'package:unrar_file/unrar_file.dart';
+import 'package:unrar/unrar.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'dart:io';
@@ -136,17 +136,16 @@ class _BookViewerPageState extends State<BookViewerPage> {
       final outDir = Directory('${tempDir.path}/extracted_rar_${DateTime.now().millisecondsSinceEpoch}');
       await outDir.create(recursive: true);
 
-      await UnrarFile.extract_rar_to_target(rarPath, outDir.path);
-
+      // unrar パッケージによる解凍処理
+      final archive = await Unrar.getArchive(rarPath);
       List<String> imagePaths = [];
-      final files = outDir.listSync(recursive: true);
 
-      for (final entity in files) {
-        if (entity is File) {
-          final ext = p.extension(entity.path).toLowerCase();
-          if (['.jpg', '.jpeg', '.png', '.webp'].contains(ext)) {
-            imagePaths.add(entity.path);
-          }
+      for (final file in archive.files) {
+        final ext = p.extension(file.name).toLowerCase();
+        if (['.jpg', '.jpeg', '.png', '.webp'].contains(ext)) {
+          final outFile = File('${outDir.path}/${p.basename(file.name)}');
+          await outFile.writeAsBytes(file.content);
+          imagePaths.add(outFile.path);
         }
       }
 
