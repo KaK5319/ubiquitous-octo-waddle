@@ -158,7 +158,6 @@ class _BookViewerPageState extends State<BookViewerPage> {
               : _extractedImages.isNotEmpty
                   ? PageFlipWidget(
                       key: _pageFlipKey,
-                      cutoff: 0.2,
                       children: _extractedImages.map((imagePath) {
                         return Container(
                           color: Colors.black,
