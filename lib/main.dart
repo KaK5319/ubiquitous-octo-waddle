@@ -4,7 +4,6 @@ import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:archive/archive.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
-import 'package:page_flip/page_flip.dart';
 import 'dart:io';
 
 void main() {
@@ -35,7 +34,6 @@ class BookViewerPage extends StatefulWidget {
 }
 
 class _BookViewerPageState extends State<BookViewerPage> {
-  final _pageFlipKey = GlobalKey<PageFlipWidgetState>();
   String? _filePath;
   List<String> _extractedImages = [];
   bool _isLoading = false;
@@ -156,19 +154,19 @@ class _BookViewerPageState extends State<BookViewerPage> {
                   pageFling: true,
                 )
               : _extractedImages.isNotEmpty
-                  ? PageFlipWidget(
-                      key: _pageFlipKey,
-                      children: _extractedImages.map((imagePath) {
+                  ? PageView.builder(
+                      itemCount: _extractedImages.length,
+                      itemBuilder: (context, index) {
                         return Container(
                           color: Colors.black,
                           child: Center(
                             child: Image.file(
-                              File(imagePath),
+                              File(_extractedImages[index]),
                               fit: BoxFit.contain,
                             ),
                           ),
                         );
-                      }).toList(),
+                      },
                     )
                   : Center(
                       child: Column(
