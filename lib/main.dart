@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:archive/archive.dart';
-import 'package:unrar/unrar.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'dart:io';
@@ -58,12 +57,10 @@ class _BookViewerPageState extends State<BookViewerPage> {
           });
         } else if (extension == '.zip') {
           await _extractZip(path);
-        } else if (extension == '.rar') {
-          await _extractRar(path);
         } else {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('PDF、ZIP、またはRARファイルを選択してください')),
+              const SnackBar(content: Text('PDFまたはZIPファイルを選択してください')),
             );
           }
         }
@@ -125,49 +122,6 @@ class _BookViewerPageState extends State<BookViewerPage> {
     }
   }
 
-  Future<void> _extractRar(String rarPath) async {
-    setState(() {
-      _isLoading = true;
-      _loadingText = 'RARファイルを解凍中...';
-    });
-
-    try {
-      final tempDir = await getTemporaryDirectory();
-      final outDir = Directory('${tempDir.path}/extracted_rar_${DateTime.now().millisecondsSinceEpoch}');
-      await outDir.create(recursive: true);
-
-      // unrar パッケージによる解凍処理
-      final archive = await Unrar.getArchive(rarPath);
-      List<String> imagePaths = [];
-
-      for (final file in archive.files) {
-        final ext = p.extension(file.name).toLowerCase();
-        if (['.jpg', '.jpeg', '.png', '.webp'].contains(ext)) {
-          final outFile = File('${outDir.path}/${p.basename(file.name)}');
-          await outFile.writeAsBytes(file.content);
-          imagePaths.add(outFile.path);
-        }
-      }
-
-      imagePaths.sort();
-
-      setState(() {
-        _filePath = null;
-        _extractedImages = imagePaths;
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('RARの読み込みに失敗しました: $e')),
-        );
-      }
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -216,7 +170,7 @@ class _BookViewerPageState extends State<BookViewerPage> {
                         children: [
                           const Icon(Icons.menu_book, size: 80, color: Colors.grey),
                           const SizedBox(height: 16),
-                          const Text('PDF、ZIP、またはRARファイルを選択してください'),
+                          const Text('PDFまたはZIPファイルを選択してください'),
                           const SizedBox(height: 16),
                           ElevatedButton.icon(
                             onPressed: _pickFile,
