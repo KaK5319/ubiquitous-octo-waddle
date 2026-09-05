@@ -5,8 +5,9 @@ plugins {
 }
 
 android {
-    namespace = "com.example.ubiquitous_octo_waddle"
-    compileSdk = 36
+    namespace = "com.example.sidebooks_clone"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
@@ -14,15 +15,15 @@ android {
     }
 
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = JavaVersion.VERSION_1_8
     }
 
     defaultConfig {
-        applicationId = "com.example.ubiquitous_octo_waddle"
-        minSdk = 21
-        targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        applicationId = "com.example.sidebooks_clone"
+        minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
     }
 
     buildTypes {
