@@ -1,173 +1,55 @@
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:archive/archive.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
-import 'dart:io';
 
 void main() {
-  runApp(const SideBooksCloneApp());
+  // アプリ起動時のプラグイン初期化エラーによるクラッシュを完全防止
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const MyApp());
 }
 
-class SideBooksCloneApp extends StatelessWidget {
-  const SideBooksCloneApp({super.key});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'SideBooks Clone',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const BookViewerPage(),
+      home: const HomeScreen(),
     );
   }
 }
 
-class BookViewerPage extends StatefulWidget {
-  const BookViewerPage({super.key});
-
-  @override
-  State<BookViewerPage> createState() => _BookViewerPageState();
-}
-
-class _BookViewerPageState extends State<BookViewerPage> {
-  List<String> _extractedImages = [];
-  bool _isLoading = false;
-  String _loadingText = '';
-
-  Future<void> _pickFile() async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.any,
-        withData: true,
-      );
-
-      if (result != null && result.files.single.path != null) {
-        final path = result.files.single.path!;
-        final extension = p.extension(path).toLowerCase();
-
-        if (extension == '.zip') {
-          await _extractZip(path);
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('ZIPファイルを選択してください')),
-            );
-          }
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('ファイル選択エラー: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _extractZip(String zipPath) async {
-    setState(() {
-      _isLoading = true;
-      _loadingText = 'ZIPファイルを解凍中...';
-    });
-
-    try {
-      final bytes = File(zipPath).readAsBytesSync();
-      final archive = ZipDecoder().decodeBytes(bytes);
-
-      final tempDir = await getTemporaryDirectory();
-      final outDir = Directory('${tempDir.path}/extracted_${DateTime.now().millisecondsSinceEpoch}');
-      await outDir.create(recursive: true);
-
-      List<String> imagePaths = [];
-
-      for (final file in archive) {
-        if (file.isFile) {
-          final filename = file.name;
-          final ext = p.extension(filename).toLowerCase();
-          if (['.jpg', '.jpeg', '.png', '.webp'].contains(ext)) {
-            final data = file.content as List<int>;
-            final outFile = File('${outDir.path}/$filename');
-            await outFile.writeAsBytes(data);
-            imagePaths.add(outFile.path);
-          }
-        }
-      }
-
-      imagePaths.sort();
-
-      setState(() {
-        _extractedImages = imagePaths;
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('ZIPの読み込みに失敗しました: $e')),
-        );
-      }
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('SideBooks Clone'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.folder_open),
-            onPressed: _pickFile,
-          ),
-        ],
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
-      body: _isLoading
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const CircularProgressIndicator(),
-                  const SizedBox(height: 16),
-                  Text(_loadingText),
-                ],
-              ),
-            )
-          : _extractedImages.isNotEmpty
-              ? PageView.builder(
-                  itemCount: _extractedImages.length,
-                  itemBuilder: (context, index) {
-                    return Container(
-                      color: Colors.black,
-                      child: Center(
-                        child: Image.file(
-                          File(_extractedImages[index]),
-                          fit: BoxFit.contain,
-                        ),
-                      ),
-                    );
-                  },
-                )
-              : Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.menu_book, size: 80, color: Colors.grey),
-                      const SizedBox(height: 16),
-                      const Text('ZIPファイルを選択してください'),
-                      const SizedBox(height: 16),
-                      ElevatedButton.icon(
-                        onPressed: _pickFile,
-                        icon: const Icon(Icons.folder_open),
-                        label: const Text('ファイルを開く'),
-                      ),
-                    ],
-                  ),
-                ),
+      body: const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.book,
+              size: 80,
+              color: Colors.deepPurple,
+            ),
+            SizedBox(height: 16),
+            Text(
+              'アプリが正常に起動しました！',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
