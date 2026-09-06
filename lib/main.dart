@@ -1,7 +1,9 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
+import 'package:pdfx/pdfx.dart' as pdfx;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,6 +38,7 @@ class BookItem {
   final String title;
   final String? path;
   final Color coverColor;
+  Uint8List? thumbnail; // 表紙画像データ
   bool isFavorite;
 
   BookItem({
@@ -43,6 +46,7 @@ class BookItem {
     required this.title,
     this.path,
     required this.coverColor,
+    this.thumbnail,
     this.isFavorite = false,
   });
 }
@@ -57,6 +61,23 @@ class MainShelfScreen extends StatefulWidget {
 class _MainShelfScreenState extends State<MainShelfScreen> {
   final List<BookItem> _books = [];
 
+  // PDFの1ページ目を画像として生成する処理
+  Future<Uint8List?> _generateThumbnail(String filePath) async {
+    try {
+      final document = await pdfx.PdfDocument.openFile(filePath);
+      final page = await document.getPage(1);
+      final pageImage = await page.render(
+        width: page.width / 2,
+        height: page.height / 2,
+        format: pdfx.PdfPageImageFormat.jpeg,
+      );
+      await document.close();
+      return pageImage?.bytes;
+    } catch (e) {
+      return null;
+    }
+  }
+
   // 端末からPDFを選択して追加する関数
   Future<void> _pickPDFFile() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -66,6 +87,8 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
 
     if (result != null && result.files.single.path != null) {
       PlatformFile file = result.files.single;
+      final thumbnailBytes = await _generateThumbnail(file.path!);
+
       setState(() {
         _books.add(
           BookItem(
@@ -73,6 +96,7 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
             title: file.name,
             path: file.path,
             coverColor: Colors.brown.shade700,
+            thumbnail: thumbnailBytes,
           ),
         );
       });
@@ -148,35 +172,47 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
                               ),
                             ],
                           ),
-                          child: Stack(
-                            children: [
-                              Positioned(
-                                left: 0,
-                                top: 0,
-                                bottom: 0,
-                                width: 8,
-                                child: Container(color: Colors.black12),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Spacer(),
-                                    Text(
-                                      book.title,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12,
-                                      ),
-                                      maxLines: 3,
-                                      overflow: TextOverflow.ellipsis,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: Stack(
+                              children: [
+                                // サムネイル画像がある場合は表紙に表示
+                                if (book.thumbnail != null)
+                                  Positioned.fill(
+                                    child: Image.memory(
+                                      book.thumbnail!,
+                                      fit: BoxFit.cover,
                                     ),
-                                  ],
+                                  )
+                                else
+                                  Padding(
+                                    padding: const EdgeInsets.all(8.0),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Spacer(),
+                                        Text(
+                                          book.title,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                          ),
+                                          maxLines: 3,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                Positioned(
+                                  left: 0,
+                                  top: 0,
+                                  bottom: 0,
+                                  width: 6,
+                                  child: Container(color: Colors.black26),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       );
@@ -194,7 +230,6 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
   }
 }
 
-// PDF表示画面
 class PDFViewerScreen extends StatefulWidget {
   final BookItem book;
 
@@ -220,7 +255,7 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
           PDFView(
             filePath: widget.book.path,
             enableSwipe: true,
-            swipeHorizontal: true, // 横めくり設定
+            swipeHorizontal: true,
             autoSpacing: false,
             pageFling: true,
             onRender: (pages) {
