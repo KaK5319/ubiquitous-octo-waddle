@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
-import 'package:turn/turn.dart';
+import 'package:page_turn/page_turn.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -153,7 +153,7 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => CurlPDFViewerScreen(book: book),
+                                builder: (context) => PageTurnPDFViewerScreen(book: book),
                               ),
                             );
                           }
@@ -227,21 +227,22 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
   }
 }
 
-// リアルカールアニメーション搭載 PDF ビューア
-class CurlPDFViewerScreen extends StatefulWidget {
+// リアルなページカール効果つきビューア
+class PageTurnPDFViewerScreen extends StatefulWidget {
   final BookItem book;
 
-  const CurlPDFViewerScreen({super.key, required this.book});
+  const PageTurnPDFViewerScreen({super.key, required this.book});
 
   @override
-  State<CurlPDFViewerScreen> createState() => _CurlPDFViewerScreenState();
+  State<PageTurnPDFViewerScreen> createState() => _PageTurnPDFViewerScreenState();
 }
 
-class _CurlPDFViewerScreenState extends State<CurlPDFViewerScreen> {
+class _PageTurnPDFViewerScreenState extends State<PageTurnPDFViewerScreen> {
   pdfx.PdfDocument? _pdfDocument;
   int _pageCount = 0;
   int _currentPageIndex = 0;
   bool _isLoading = true;
+  final GlobalKey<PageTurnState> _controller = GlobalKey<PageTurnState>();
 
   @override
   void initState() {
@@ -278,20 +279,22 @@ class _CurlPDFViewerScreenState extends State<CurlPDFViewerScreen> {
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
           : Stack(
               children: [
-                TurnPageView.builder(
-                  itemCount: _pageCount,
-                  overcurvedPageOffset: 0.2,
-                  onPageChanged: (index) {
-                    setState(() {
-                      _currentPageIndex = index;
-                    });
-                  },
-                  itemBuilder: (context, index) {
+                PageTurn(
+                  key: _controller,
+                  backgroundColor: Colors.black,
+                  showBackSide: true,
+                  lastPage: Container(
+                    color: Colors.black,
+                    child: const Center(
+                      child: Text('最後のページです', style: TextStyle(color: Colors.white)),
+                    ),
+                  ),
+                  children: List.generate(_pageCount, (index) {
                     return PdfPageWidget(
                       document: _pdfDocument!,
                       pageNumber: index + 1,
                     );
-                  },
+                  }),
                 ),
                 Positioned(
                   bottom: 16,
