@@ -1,9 +1,9 @@
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
-import 'package:page_flip_builder/page_flip_builder.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -153,7 +153,7 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => AnimatedPDFViewerScreen(book: book),
+                                builder: (context) => CustomAnimatedPDFViewerScreen(book: book),
                               ),
                             );
                           }
@@ -227,25 +227,27 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
   }
 }
 
-// ページめくりアニメーション付きPDFビューア
-class AnimatedPDFViewerScreen extends StatefulWidget {
+// 3D ページめくりアニメーション搭載 PDF ビューア
+class CustomAnimatedPDFViewerScreen extends StatefulWidget {
   final BookItem book;
 
-  const AnimatedPDFViewerScreen({super.key, required this.book});
+  const CustomAnimatedPDFViewerScreen({super.key, required this.book});
 
   @override
-  State<AnimatedPDFViewerScreen> createState() => _AnimatedPDFViewerScreenState();
+  State<CustomAnimatedPDFViewerScreen> createState() => _CustomAnimatedPDFViewerScreenState();
 }
 
-class _AnimatedPDFViewerScreenState extends State<AnimatedPDFViewerScreen> {
+class _CustomAnimatedPDFViewerScreenState extends State<CustomAnimatedPDFViewerScreen> {
   pdfx.PdfDocument? _pdfDocument;
   int _pageCount = 0;
   int _currentPageIndex = 0;
   bool _isLoading = true;
+  late PageController _pageController;
 
   @override
   void initState() {
     super.initState();
+    _pageController = PageController();
     _loadPdf();
   }
 
@@ -262,6 +264,7 @@ class _AnimatedPDFViewerScreenState extends State<AnimatedPDFViewerScreen> {
 
   @override
   void dispose() {
+    _pageController.dispose();
     _pdfDocument?.close();
     super.dispose();
   }
@@ -278,20 +281,38 @@ class _AnimatedPDFViewerScreenState extends State<AnimatedPDFViewerScreen> {
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
           : Stack(
               children: [
-                PageFlipBuilder(
+                PageView.builder(
+                  controller: _pageController,
                   itemCount: _pageCount,
-                  interactive: true,
-                  flipAxis: Axis.horizontal,
-                  maxTilt: 0.003,
-                  onPageSwapped: (pageIndex) {
+                  onPageChanged: (index) {
                     setState(() {
-                      _currentPageIndex = pageIndex;
+                      _currentPageIndex = index;
                     });
                   },
                   itemBuilder: (context, index) {
-                    return PdfPageImageWidget(
-                      document: _pdfDocument!,
-                      pageNumber: index + 1,
+                    return AnimatedBuilder(
+                      animation: _pageController,
+                      builder: (context, child) {
+                        double value = 0.0;
+                        if (_pageController.position.haveDimensions) {
+                          value = (_pageController.page ?? 0) - index;
+                        }
+                        
+                        // 3D回転行列を適用して本を開くようなエフェクトを作成
+                        final Matrix4 transform = Matrix4.identity()
+                          ..setEntry(3, 2, 0.001)
+                          ..rotateY(value * (pi / 2));
+
+                        return Transform(
+                          transform: transform,
+                          alignment: value >= 0 ? Alignment.centerRight : Alignment.centerLeft,
+                          child: child,
+                        );
+                      },
+                      child: PdfPageWidget(
+                        document: _pdfDocument!,
+                        pageNumber: index + 1,
+                      ),
                     );
                   },
                 ),
@@ -316,22 +337,21 @@ class _AnimatedPDFViewerScreenState extends State<AnimatedPDFViewerScreen> {
   }
 }
 
-// 各ページを画像としてレンダリングするウィジェット
-class PdfPageImageWidget extends StatefulWidget {
+class PdfPageWidget extends StatefulWidget {
   final pdfx.PdfDocument document;
   final int pageNumber;
 
-  const PdfPageImageWidget({
+  const PdfPageWidget({
     super.key,
     required this.document,
     required this.pageNumber,
   });
 
   @override
-  State<PdfPageImageWidget> createState() => _PdfPageImageWidgetState();
+  State<PdfPageWidget> createState() => _PdfPageWidgetState();
 }
 
-class _PdfPageImageWidgetState extends State<PdfPageImageWidget> {
+class _PdfPageWidgetState extends State<PdfPageWidget> {
   Uint8List? _imageBytes;
 
   @override
