@@ -240,7 +240,7 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.black70,
+                color: Colors.black54,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
