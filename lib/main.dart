@@ -2,8 +2,8 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
+import 'package:page_flip_builder/page_flip_builder.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,7 +38,7 @@ class BookItem {
   final String title;
   final String? path;
   final Color coverColor;
-  Uint8List? thumbnail; // 表紙画像データ
+  Uint8List? thumbnail;
   bool isFavorite;
 
   BookItem({
@@ -61,7 +61,6 @@ class MainShelfScreen extends StatefulWidget {
 class _MainShelfScreenState extends State<MainShelfScreen> {
   final List<BookItem> _books = [];
 
-  // PDFの1ページ目を画像として生成する処理
   Future<Uint8List?> _generateThumbnail(String filePath) async {
     try {
       final document = await pdfx.PdfDocument.openFile(filePath);
@@ -78,7 +77,6 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
     }
   }
 
-  // 端末からPDFを選択して追加する関数
   Future<void> _pickPDFFile() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -155,7 +153,7 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => PDFViewerScreen(book: book),
+                                builder: (context) => AnimatedPDFViewerScreen(book: book),
                               ),
                             );
                           }
@@ -176,7 +174,6 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
                             borderRadius: BorderRadius.circular(6),
                             child: Stack(
                               children: [
-                                // サムネイル画像がある場合は表紙に表示
                                 if (book.thumbnail != null)
                                   Positioned.fill(
                                     child: Image.memory(
@@ -230,61 +227,142 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
   }
 }
 
-class PDFViewerScreen extends StatefulWidget {
+// ページめくりアニメーション付きPDFビューア
+class AnimatedPDFViewerScreen extends StatefulWidget {
   final BookItem book;
 
-  const PDFViewerScreen({super.key, required this.book});
+  const AnimatedPDFViewerScreen({super.key, required this.book});
 
   @override
-  State<PDFViewerScreen> createState() => _PDFViewerScreenState();
+  State<AnimatedPDFViewerScreen> createState() => _AnimatedPDFViewerScreenState();
 }
 
-class _PDFViewerScreenState extends State<PDFViewerScreen> {
-  int _totalPages = 0;
-  int _currentPage = 0;
+class _AnimatedPDFViewerScreenState extends State<AnimatedPDFViewerScreen> {
+  pdfx.PdfDocument? _pdfDocument;
+  int _pageCount = 0;
+  int _currentPageIndex = 0;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPdf();
+  }
+
+  Future<void> _loadPdf() async {
+    if (widget.book.path != null) {
+      final doc = await pdfx.PdfDocument.openFile(widget.book.path!);
+      setState(() {
+        _pdfDocument = doc;
+        _pageCount = doc.pagesCount;
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _pdfDocument?.close();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.black,
       appBar: AppBar(
         title: Text(widget.book.title),
         backgroundColor: Colors.black,
       ),
-      body: Stack(
-        children: [
-          PDFView(
-            filePath: widget.book.path,
-            enableSwipe: true,
-            swipeHorizontal: true,
-            autoSpacing: false,
-            pageFling: true,
-            onRender: (pages) {
-              setState(() {
-                _totalPages = pages ?? 0;
-              });
-            },
-            onPageChanged: (page, total) {
-              setState(() {
-                _currentPage = page ?? 0;
-              });
-            },
-          ),
-          Positioned(
-            bottom: 16,
-            left: 16,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.black54,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                '${_currentPage + 1} / $_totalPages ページ',
-                style: const TextStyle(color: Colors.white),
-              ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: Colors.white))
+          : Stack(
+              children: [
+                PageFlipBuilder(
+                  itemCount: _pageCount,
+                  interactive: true,
+                  flipAxis: Axis.horizontal,
+                  maxTilt: 0.003,
+                  onPageSwapped: (pageIndex) {
+                    setState(() {
+                      _currentPageIndex = pageIndex;
+                    });
+                  },
+                  itemBuilder: (context, index) {
+                    return PdfPageImageWidget(
+                      document: _pdfDocument!,
+                      pageNumber: index + 1,
+                    );
+                  },
+                ),
+                Positioned(
+                  bottom: 16,
+                  left: 16,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${_currentPageIndex + 1} / $_pageCount ページ',
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
+    );
+  }
+}
+
+// 各ページを画像としてレンダリングするウィジェット
+class PdfPageImageWidget extends StatefulWidget {
+  final pdfx.PdfDocument document;
+  final int pageNumber;
+
+  const PdfPageImageWidget({
+    super.key,
+    required this.document,
+    required this.pageNumber,
+  });
+
+  @override
+  State<PdfPageImageWidget> createState() => _PdfPageImageWidgetState();
+}
+
+class _PdfPageImageWidgetState extends State<PdfPageImageWidget> {
+  Uint8List? _imageBytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _renderPage();
+  }
+
+  Future<void> _renderPage() async {
+    final page = await widget.document.getPage(widget.pageNumber);
+    final pageImage = await page.render(
+      width: page.width * 2,
+      height: page.height * 2,
+      format: pdfx.PdfPageImageFormat.jpeg,
+    );
+    if (mounted) {
+      setState(() {
+        _imageBytes = pageImage?.bytes;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_imageBytes == null) {
+      return const Center(child: CircularProgressIndicator(color: Colors.white54));
+    }
+    return Container(
+      color: Colors.black,
+      child: Center(
+        child: Image.memory(_imageBytes!, fit: BoxFit.contain),
       ),
     );
   }
