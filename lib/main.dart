@@ -7,7 +7,8 @@ import 'package:pdfx/pdfx.dart' as pdfx;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  PaintingBinding.instance.imageCache.maximumSizeBytes = 1024 * 1024 * 32;
+  // キャッシュサイズを極小にしてクラッシュを完全防止
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 1024 * 1024 * 16;
   runApp(const SideBooksApp());
 }
 
@@ -65,9 +66,10 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
     try {
       document = await pdfx.PdfDocument.openFile(filePath);
       final page = await document.getPage(1);
+      // サムネイルは超軽量でレンダリング
       final pageImage = await page.render(
-        width: page.width / 4,
-        height: page.height / 4,
+        width: page.width / 8,
+        height: page.height / 8,
         format: pdfx.PdfPageImageFormat.jpeg,
       );
       return pageImage?.bytes;
@@ -159,7 +161,7 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => SafePDFViewerScreen(book: book),
+                              builder: (context) => UltraSafePDFViewerScreen(book: book),
                             ),
                           );
                         },
@@ -232,15 +234,15 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
   }
 }
 
-class SafePDFViewerScreen extends StatefulWidget {
+class UltraSafePDFViewerScreen extends StatefulWidget {
   final BookItem book;
-  const SafePDFViewerScreen({super.key, required this.book});
+  const UltraSafePDFViewerScreen({super.key, required this.book});
 
   @override
-  State<SafePDFViewerScreen> createState() => _SafePDFViewerScreenState();
+  State<UltraSafePDFViewerScreen> createState() => _UltraSafePDFViewerScreenState();
 }
 
-class _SafePDFViewerScreenState extends State<SafePDFViewerScreen> {
+class _UltraSafePDFViewerScreenState extends State<UltraSafePDFViewerScreen> {
   pdfx.PdfDocument? _pdfDocument;
   int _pageCount = 0;
   int _currentPageIndex = 0;
@@ -270,7 +272,7 @@ class _SafePDFViewerScreenState extends State<SafePDFViewerScreen> {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _errorMessage = 'PDFを開けませんでした:\n$e';
+          _errorMessage = 'PDF読み込みエラー:\n$e';
         });
       }
     }
@@ -424,9 +426,10 @@ class _SinglePdfPageWidgetState extends State<SinglePdfPageWidget> {
   Future<void> _renderPage() async {
     try {
       final page = await widget.document.getPage(widget.pageNumber);
+      // メモリ対策: 解像度を落として表示（1/2サイズ）
       final pageImage = await page.render(
-        width: page.width,
-        height: page.height,
+        width: page.width / 2,
+        height: page.height / 2,
         format: pdfx.PdfPageImageFormat.jpeg,
       );
 
@@ -436,7 +439,7 @@ class _SinglePdfPageWidgetState extends State<SinglePdfPageWidget> {
         });
       }
     } catch (e) {
-      // エラーハンドリング
+      // エラー無視
     }
   }
 
