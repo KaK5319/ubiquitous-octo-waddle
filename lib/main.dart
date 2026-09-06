@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -154,7 +154,7 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => RealCurlPDFViewerScreen(book: book),
+                                builder: (context) => ShaderCurlViewerScreen(book: book),
                               ),
                             );
                           }
@@ -228,33 +228,35 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
   }
 }
 
-// リアル3Dカール・シャドウアニメーション表示画面
-class RealCurlPDFViewerScreen extends StatefulWidget {
+class ShaderCurlViewerScreen extends StatefulWidget {
   final BookItem book;
 
-  const RealCurlPDFViewerScreen({super.key, required this.book});
+  const ShaderCurlViewerScreen({super.key, required this.book});
 
   @override
-  State<RealCurlPDFViewerScreen> createState() => _RealCurlPDFViewerScreenState();
+  State<ShaderCurlViewerScreen> createState() => _ShaderCurlViewerScreenState();
 }
 
-class _RealCurlPDFViewerScreenState extends State<RealCurlPDFViewerScreen> {
+class _ShaderCurlViewerScreenState extends State<ShaderCurlViewerScreen> {
   pdfx.PdfDocument? _pdfDocument;
   int _pageCount = 0;
   int _currentPageIndex = 0;
   bool _isLoading = true;
 
-  double _dragProgress = 0.0; // 0.0 ~ 1.0 めくり進行度
+  ui.FragmentShader? _shader;
+  double _dragProgress = 0.0;
   bool _isDragging = false;
-  bool _isNextPage = true; // 右開き方向
 
   @override
   void initState() {
     super.initState();
-    _loadPdf();
+    _loadShaderAndPdf();
   }
 
-  Future<void> _loadPdf() async {
+  Future<void> _loadShaderAndPdf() async {
+    final program = await ui.FragmentProgram.fromAsset('shaders/page_curl.frag');
+    _shader = program.fragmentShader();
+
     if (widget.book.path != null) {
       try {
         final doc = await pdfx.PdfDocument.openFile(widget.book.path!);
@@ -274,6 +276,7 @@ class _RealCurlPDFViewerScreenState extends State<RealCurlPDFViewerScreen> {
   @override
   void dispose() {
     _pdfDocument?.close();
+    _shader?.dispose();
     PaintingBinding.instance.imageCache.clear();
     super.dispose();
   }
@@ -281,9 +284,8 @@ class _RealCurlPDFViewerScreenState extends State<RealCurlPDFViewerScreen> {
   void _onHorizontalDragUpdate(DragUpdateDetails details, double screenWidth) {
     setState(() {
       _isDragging = true;
-      // 右から左へ（次のページ）
       _dragProgress -= details.delta.dx / screenWidth;
-      _dragProgress = _dragProgress.clamp(-1.0, 1.0);
+      _dragProgress = _dragProgress.clamp(0.0, 1.0);
     });
   }
 
@@ -292,8 +294,6 @@ class _RealCurlPDFViewerScreenState extends State<RealCurlPDFViewerScreen> {
       _isDragging = false;
       if (_dragProgress > 0.3 && _currentPageIndex < _pageCount - 1) {
         _currentPageIndex++;
-      } else if (_dragProgress < -0.3 && _currentPageIndex > 0) {
-        _currentPageIndex--;
       }
       _dragProgress = 0.0;
       PaintingBinding.instance.imageCache.clear();
@@ -305,74 +305,40 @@ class _RealCurlPDFViewerScreenState extends State<RealCurlPDFViewerScreen> {
     final screenWidth = MediaQuery.of(context).size.width;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF212121),
+      backgroundColor: Colors.black,
       appBar: AppBar(
         title: Text(widget.book.title),
         backgroundColor: Colors.black,
       ),
-      body: _isLoading
+      body: _isLoading || _shader == null
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
           : GestureDetector(
               onHorizontalDragUpdate: (details) => _onHorizontalDragUpdate(details, screenWidth),
               onHorizontalDragEnd: _onHorizontalDragEnd,
               child: Stack(
                 children: [
-                  // ベース（現在のページ）
-                  SinglePdfPageWidget(
-                    key: ValueKey('page_${_currentPageIndex}'),
-                    document: _pdfDocument!,
-                    pageNumber: _currentPageIndex + 1,
+                  // 下のページ（次のページ）
+                  if (_currentPageIndex + 1 < _pageCount)
+                    SinglePdfPageWidget(
+                      key: ValueKey('page_${_currentPageIndex + 1}'),
+                      document: _pdfDocument!,
+                      pageNumber: _currentPageIndex + 2,
+                    ),
+
+                  // カール処理適用上のページ
+                  CustomPaint(
+                    size: Size.infinite,
+                    painter: CurlShaderPainter(
+                      shader: _shader!,
+                      progress: _dragProgress,
+                    ),
+                    child: SinglePdfPageWidget(
+                      key: ValueKey('page_${_currentPageIndex}'),
+                      document: _pdfDocument!,
+                      pageNumber: _currentPageIndex + 1,
+                    ),
                   ),
 
-                  // めくられている最中のページと3Dカール影
-                  if (_isDragging && _dragProgress != 0.0) ...[
-                    // 背面の影（捲れた下のページに落ちる影）
-                    Positioned.fill(
-                      child: Container(
-                        color: Colors.black.withOpacity((_dragProgress.abs() * 0.4).clamp(0.0, 0.4)),
-                      ),
-                    ),
-
-                    // カールする紙（3D変形と湾曲シャドウ）
-                    Transform(
-                      transform: Matrix4.identity()
-                        ..setEntry(3, 2, 0.001) // 遠近感
-                        ..rotateY(_dragProgress * math.pi * 0.45), // しなり回転
-                      alignment: _dragProgress > 0 ? Alignment.centerLeft : Alignment.centerRight,
-                      child: Stack(
-                        children: [
-                          SinglePdfPageWidget(
-                            key: ValueKey('curl_page_${_currentPageIndex}'),
-                            document: _pdfDocument!,
-                            pageNumber: (_dragProgress > 0
-                                    ? (_currentPageIndex + 1).clamp(0, _pageCount - 1)
-                                    : (_currentPageIndex - 1).clamp(0, _pageCount - 1)) +
-                                1,
-                          ),
-                          // 本物の紙の立体感（画像の中央の黒い折り目グラデーション）
-                          Positioned.fill(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.centerLeft,
-                                  end: Alignment.centerRight,
-                                  colors: [
-                                    Colors.black.withOpacity(0.5),
-                                    Colors.transparent,
-                                    Colors.white.withOpacity(0.2),
-                                    Colors.black.withOpacity(0.4),
-                                  ],
-                                  stops: const [0.0, 0.15, 0.85, 1.0],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-
-                  // ページ数インジケーター
                   Positioned(
                     bottom: 16,
                     left: 16,
@@ -392,6 +358,28 @@ class _RealCurlPDFViewerScreenState extends State<RealCurlPDFViewerScreen> {
               ),
             ),
     );
+  }
+}
+
+class CurlShaderPainter extends CustomPainter {
+  final ui.FragmentShader shader;
+  final double progress;
+
+  CurlShaderPainter({required this.shader, required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    shader.setFloat(0, size.width);
+    shader.setFloat(1, size.height);
+    shader.setFloat(2, progress);
+
+    final paint = Paint()..shader = shader;
+    canvas.drawRect(Offset.zero & size, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CurlShaderPainter oldDelegate) {
+    return oldDelegate.progress != progress;
   }
 }
 
