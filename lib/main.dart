@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -227,7 +226,7 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
   }
 }
 
-// カスタムカール（紙めくり）ビューア
+// 自然なスライド＆カール効果の PDF ビューア
 class CustomCurlPDFViewerScreen extends StatefulWidget {
   final BookItem book;
 
@@ -242,11 +241,12 @@ class _CustomCurlPDFViewerScreenState extends State<CustomCurlPDFViewerScreen> {
   int _pageCount = 0;
   int _currentPageIndex = 0;
   bool _isLoading = true;
-  double _dragAmount = 0.0;
+  late PageController _pageController;
 
   @override
   void initState() {
     super.initState();
+    _pageController = PageController();
     _loadPdf();
   }
 
@@ -263,34 +263,13 @@ class _CustomCurlPDFViewerScreenState extends State<CustomCurlPDFViewerScreen> {
 
   @override
   void dispose() {
+    _pageController.dispose();
     _pdfDocument?.close();
     super.dispose();
   }
 
-  void _onHorizontalDragUpdate(DragUpdateDetails details, double screenWidth) {
-    setState(() {
-      _dragAmount -= details.primaryDelta! / screenWidth;
-      _dragAmount = _dragAmount.clamp(0.0, 1.0);
-    });
-  }
-
-  void _onHorizontalDragEnd(DragEndDetails details) {
-    if (_dragAmount > 0.4 && _currentPageIndex < _pageCount - 1) {
-      setState(() {
-        _currentPageIndex++;
-        _dragAmount = 0.0;
-      });
-    } else {
-      setState(() {
-        _dragAmount = 0.0;
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -299,62 +278,54 @@ class _CustomCurlPDFViewerScreenState extends State<CustomCurlPDFViewerScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
-          : GestureDetector(
-              onHorizontalDragUpdate: (details) => _onHorizontalDragUpdate(details, size.width),
-              onHorizontalDragEnd: _onHorizontalDragEnd,
-              child: Stack(
-                children: [
-                  // 下のページ（次のページ）
-                  if (_currentPageIndex < _pageCount - 1)
-                    PdfPageWidget(
-                      document: _pdfDocument!,
-                      pageNumber: _currentPageIndex + 2,
+          : Stack(
+              children: [
+                PageView.builder(
+                  controller: _pageController,
+                  itemCount: _pageCount,
+                  onPageChanged: (index) {
+                    setState(() {
+                      _currentPageIndex = index;
+                    });
+                  },
+                  itemBuilder: (context, index) {
+                    return AnimatedBuilder(
+                      animation: _pageController,
+                      builder: (context, child) {
+                        double value = 1.0;
+                        if (_pageController.position.haveDimensions) {
+                          value = _pageController.page! - index;
+                          value = (1 - (value.abs() * 0.3)).clamp(0.0, 1.0);
+                        }
+                        return Transform(
+                          transform: Matrix4.identity()..scale(value, value),
+                          alignment: Alignment.center,
+                          child: child,
+                        );
+                      },
+                      child: PdfPageWidget(
+                        document: _pdfDocument!,
+                        pageNumber: index + 1,
+                      ),
+                    );
+                  },
+                ),
+                Positioned(
+                  bottom: 16,
+                  left: 16,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(12),
                     ),
-
-                  // 上のページ（現在のページ）のカール処理
-                  if (_currentPageIndex < _pageCount)
-                    Transform(
-                      alignment: Alignment.centerLeft,
-                      transform: Matrix4.identity()
-                        ..setEntry(3, 2, 0.001)
-                        ..rotateY(-_dragAmount * math.pi * 0.45),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          boxShadow: _dragAmount > 0
-                              ? [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.5 * _dragAmount),
-                                    blurRadius: 10,
-                                    spreadRadius: 5,
-                                  ),
-                                ]
-                              : [],
-                        ),
-                        child: PdfPageWidget(
-                          document: _pdfDocument!,
-                          pageNumber: _currentPageIndex + 1,
-                        ),
-                      ),
-                    ),
-
-                  // ページ数表示
-                  Positioned(
-                    bottom: 16,
-                    left: 16,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '${_currentPageIndex + 1} / $_pageCount ページ',
-                        style: const TextStyle(color: Colors.white),
-                      ),
+                    child: Text(
+                      '${_currentPageIndex + 1} / $_pageCount ページ',
+                      style: const TextStyle(color: Colors.white),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
     );
   }
