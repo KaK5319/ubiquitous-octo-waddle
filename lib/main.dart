@@ -3,11 +3,11 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
+import 'package:flutter_page_curl/flutter_page_curl.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  // 画像キャッシュの上限を大幅に絞り、メモリ溢れを強制防止
-  PaintingBinding.instance.imageCache.maximumSizeBytes = 1024 * 1024 * 32; // 32MB制限
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 1024 * 1024 * 32; // メモリ枯渇防止
   runApp(const SideBooksApp());
 }
 
@@ -154,7 +154,7 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => SafePDFViewerScreen(book: book),
+                                builder: (context) => CurlPDFViewerScreen(book: book),
                               ),
                             );
                           }
@@ -228,17 +228,17 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
   }
 }
 
-// クラッシュ完全対策版 ビューア
-class SafePDFViewerScreen extends StatefulWidget {
+// リアル3Dページカール表示スクリーン
+class CurlPDFViewerScreen extends StatefulWidget {
   final BookItem book;
 
-  const SafePDFViewerScreen({super.key, required this.book});
+  const CurlPDFViewerScreen({super.key, required this.book});
 
   @override
-  State<SafePDFViewerScreen> createState() => _SafePDFViewerScreenState();
+  State<CurlPDFViewerScreen> createState() => _CurlPDFViewerScreenState();
 }
 
-class _SafePDFViewerScreenState extends State<SafePDFViewerScreen> {
+class _CurlPDFViewerScreenState extends State<CurlPDFViewerScreen> {
   pdfx.PdfDocument? _pdfDocument;
   int _pageCount = 0;
   int _currentPageIndex = 0;
@@ -277,7 +277,7 @@ class _SafePDFViewerScreenState extends State<SafePDFViewerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.grey.shade900,
       appBar: AppBar(
         title: Text(widget.book.title),
         backgroundColor: Colors.black,
@@ -286,14 +286,13 @@ class _SafePDFViewerScreenState extends State<SafePDFViewerScreen> {
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
           : Stack(
               children: [
-                PageView.builder(
-                  itemCount: _pageCount,
-                  allowImplicitScrolling: false, // 画面外ページを一切先行描画しない
-                  onPageChanged: (index) {
+                PageCurl(
+                  backColor: Colors.grey.shade300,
+                  count: _pageCount,
+                  onChange: (index) {
                     setState(() {
                       _currentPageIndex = index;
                     });
-                    // ページ移動の都度、メモリの画像キャッシュを強制削除
                     PaintingBinding.instance.imageCache.clear();
                   },
                   itemBuilder: (context, index) {
@@ -310,7 +309,7 @@ class _SafePDFViewerScreenState extends State<SafePDFViewerScreen> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: Colors.black54,
+                      color: Colors.black87,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
@@ -350,17 +349,16 @@ class _SinglePdfPageWidgetState extends State<SinglePdfPageWidget> {
 
   @override
   void dispose() {
-    _imageBytes = null; // 画面から消えたら速やかにバッファクリア
+    _imageBytes = null;
     super.dispose();
   }
 
   Future<void> _renderPage() async {
     try {
       final page = await widget.document.getPage(widget.pageNumber);
-      // メモリ消費量を極力抑えるため等倍で安全にレンダリング
       final pageImage = await page.render(
-        width: page.width,
-        height: page.height,
+        width: page.width * 1.5,
+        height: page.height * 1.5,
         format: pdfx.PdfPageImageFormat.jpeg,
       );
 
@@ -370,17 +368,20 @@ class _SinglePdfPageWidgetState extends State<SinglePdfPageWidget> {
         });
       }
     } catch (e) {
-      // エラー時の安全対策
+      // エラーハンドリング
     }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_imageBytes == null) {
-      return const Center(child: CircularProgressIndicator(color: Colors.white54));
+      return Container(
+        color: Colors.white,
+        child: const Center(child: CircularProgressIndicator(color: Colors.brown)),
+      );
     }
     return Container(
-      color: Colors.black,
+      color: Colors.white,
       child: Center(
         child: Image.memory(
           _imageBytes!,
