@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter_pdfview/flutter_pdfview.dart';
+import 'package:pdfx/pdfx.dart';
 import 'package:archive/archive.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
@@ -34,10 +34,16 @@ class BookViewerPage extends StatefulWidget {
 }
 
 class _BookViewerPageState extends State<BookViewerPage> {
-  String? _filePath;
+  PdfControllerPinch? _pdfController;
   List<String> _extractedImages = [];
   bool _isLoading = false;
   String _loadingText = '';
+
+  @override
+  void dispose() {
+    _pdfController?.dispose();
+    super.dispose();
+  }
 
   Future<void> _pickFile() async {
     try {
@@ -51,8 +57,11 @@ class _BookViewerPageState extends State<BookViewerPage> {
         final extension = p.extension(path).toLowerCase();
 
         if (extension == '.pdf') {
+          _pdfController?.dispose();
           setState(() {
-            _filePath = path;
+            _pdfController = PdfControllerPinch(
+              document: PdfDocument.openFile(path),
+            );
             _extractedImages = [];
           });
         } else if (extension == '.zip') {
@@ -105,8 +114,9 @@ class _BookViewerPageState extends State<BookViewerPage> {
 
       imagePaths.sort();
 
+      _pdfController?.dispose();
       setState(() {
-        _filePath = null;
+        _pdfController = null;
         _extractedImages = imagePaths;
       });
     } catch (e) {
@@ -145,13 +155,9 @@ class _BookViewerPageState extends State<BookViewerPage> {
                 ],
               ),
             )
-          : _filePath != null
-              ? PDFView(
-                  filePath: _filePath,
-                  enableSwipe: true,
-                  swipeHorizontal: true,
-                  autoSpacing: false,
-                  pageFling: true,
+          : _pdfController != null
+              ? PdfViewPinch(
+                  controller: _pdfController!,
                 )
               : _extractedImages.isNotEmpty
                   ? PageView.builder(
