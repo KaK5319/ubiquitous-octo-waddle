@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
-import 'package:page_turn/page_turn.dart';
+import 'package:page_flip/page_flip.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -153,7 +153,7 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => PageTurnPDFViewerScreen(book: book),
+                                builder: (context) => PageFlipPDFViewerScreen(book: book),
                               ),
                             );
                           }
@@ -227,22 +227,22 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
   }
 }
 
-// リアルなページカール効果つきビューア
-class PageTurnPDFViewerScreen extends StatefulWidget {
+// 本物のカールエフェクトを適用した PDF ビューア
+class PageFlipPDFViewerScreen extends StatefulWidget {
   final BookItem book;
 
-  const PageTurnPDFViewerScreen({super.key, required this.book});
+  const PageFlipPDFViewerScreen({super.key, required this.book});
 
   @override
-  State<PageTurnPDFViewerScreen> createState() => _PageTurnPDFViewerScreenState();
+  State<PageFlipPDFViewerScreen> createState() => _PageFlipPDFViewerScreenState();
 }
 
-class _PageTurnPDFViewerScreenState extends State<PageTurnPDFViewerScreen> {
+class _PageFlipPDFViewerScreenState extends State<PageFlipPDFViewerScreen> {
   pdfx.PdfDocument? _pdfDocument;
   int _pageCount = 0;
   int _currentPageIndex = 0;
   bool _isLoading = true;
-  final GlobalKey<PageTurnState> _controller = GlobalKey<PageTurnState>();
+  final GlobalKey<PageFlipWidgetState> _pageFlipKey = GlobalKey<PageFlipWidgetState>();
 
   @override
   void initState() {
@@ -279,16 +279,10 @@ class _PageTurnPDFViewerScreenState extends State<PageTurnPDFViewerScreen> {
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
           : Stack(
               children: [
-                PageTurn(
-                  key: _controller,
+                PageFlipWidget(
+                  key: _pageFlipKey,
                   backgroundColor: Colors.black,
-                  showBackSide: true,
-                  lastPage: Container(
-                    color: Colors.black,
-                    child: const Center(
-                      child: Text('最後のページです', style: TextStyle(color: Colors.white)),
-                    ),
-                  ),
+                  cutoff: 0.2,
                   children: List.generate(_pageCount, (index) {
                     return PdfPageWidget(
                       document: _pdfDocument!,
