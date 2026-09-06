@@ -1,9 +1,9 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
-import 'package:page_flip/page_flip.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -153,7 +153,7 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => PageFlipPDFViewerScreen(book: book),
+                                builder: (context) => CustomCurlPDFViewerScreen(book: book),
                               ),
                             );
                           }
@@ -227,22 +227,22 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
   }
 }
 
-// 本物のカールエフェクトを適用した PDF ビューア
-class PageFlipPDFViewerScreen extends StatefulWidget {
+// カスタムカール（紙めくり）ビューア
+class CustomCurlPDFViewerScreen extends StatefulWidget {
   final BookItem book;
 
-  const PageFlipPDFViewerScreen({super.key, required this.book});
+  const CustomCurlPDFViewerScreen({super.key, required this.book});
 
   @override
-  State<PageFlipPDFViewerScreen> createState() => _PageFlipPDFViewerScreenState();
+  State<CustomCurlPDFViewerScreen> createState() => _CustomCurlPDFViewerScreenState();
 }
 
-class _PageFlipPDFViewerScreenState extends State<PageFlipPDFViewerScreen> {
+class _CustomCurlPDFViewerScreenState extends State<CustomCurlPDFViewerScreen> {
   pdfx.PdfDocument? _pdfDocument;
   int _pageCount = 0;
   int _currentPageIndex = 0;
   bool _isLoading = true;
-  final GlobalKey<PageFlipWidgetState> _pageFlipKey = GlobalKey<PageFlipWidgetState>();
+  double _dragAmount = 0.0;
 
   @override
   void initState() {
@@ -267,8 +267,30 @@ class _PageFlipPDFViewerScreenState extends State<PageFlipPDFViewerScreen> {
     super.dispose();
   }
 
+  void _onHorizontalDragUpdate(DragUpdateDetails details, double screenWidth) {
+    setState(() {
+      _dragAmount -= details.primaryDelta! / screenWidth;
+      _dragAmount = _dragAmount.clamp(0.0, 1.0);
+    });
+  }
+
+  void _onHorizontalDragEnd(DragEndDetails details) {
+    if (_dragAmount > 0.4 && _currentPageIndex < _pageCount - 1) {
+      setState(() {
+        _currentPageIndex++;
+        _dragAmount = 0.0;
+      });
+    } else {
+      setState(() {
+        _dragAmount = 0.0;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -277,35 +299,62 @@ class _PageFlipPDFViewerScreenState extends State<PageFlipPDFViewerScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
-          : Stack(
-              children: [
-                PageFlipWidget(
-                  key: _pageFlipKey,
-                  backgroundColor: Colors.black,
-                  cutoff: 0.2,
-                  children: List.generate(_pageCount, (index) {
-                    return PdfPageWidget(
+          : GestureDetector(
+              onHorizontalDragUpdate: (details) => _onHorizontalDragUpdate(details, size.width),
+              onHorizontalDragEnd: _onHorizontalDragEnd,
+              child: Stack(
+                children: [
+                  // 下のページ（次のページ）
+                  if (_currentPageIndex < _pageCount - 1)
+                    PdfPageWidget(
                       document: _pdfDocument!,
-                      pageNumber: index + 1,
-                    );
-                  }),
-                ),
-                Positioned(
-                  bottom: 16,
-                  left: 16,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(12),
+                      pageNumber: _currentPageIndex + 2,
                     ),
-                    child: Text(
-                      '${_currentPageIndex + 1} / $_pageCount ページ',
-                      style: const TextStyle(color: Colors.white),
+
+                  // 上のページ（現在のページ）のカール処理
+                  if (_currentPageIndex < _pageCount)
+                    Transform(
+                      alignment: Alignment.centerLeft,
+                      transform: Matrix4.identity()
+                        ..setEntry(3, 2, 0.001)
+                        ..rotateY(-_dragAmount * math.pi * 0.45),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          boxShadow: _dragAmount > 0
+                              ? [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.5 * _dragAmount),
+                                    blurRadius: 10,
+                                    spreadRadius: 5,
+                                  ),
+                                ]
+                              : [],
+                        ),
+                        child: PdfPageWidget(
+                          document: _pdfDocument!,
+                          pageNumber: _currentPageIndex + 1,
+                        ),
+                      ),
+                    ),
+
+                  // ページ数表示
+                  Positioned(
+                    bottom: 16,
+                    left: 16,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${_currentPageIndex + 1} / $_pageCount ページ',
+                        style: const TextStyle(color: Colors.white),
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
     );
   }
