@@ -7,8 +7,7 @@
 
     <application
         android:label="SideBooks Clone"
-        android:name="${applicationName}"
-        android:icon="@android:icon/sym_def_app_icon">
+        android:name="${applicationName}">
         <activity
             android:name=".MainActivity"
             android:exported="true"
