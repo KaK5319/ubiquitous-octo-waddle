@@ -1,4 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter_pdfview/flutter_pdfview.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,24 +31,22 @@ class SideBooksApp extends StatelessWidget {
   }
 }
 
-// 本のデータモデル
 class BookItem {
   final String id;
   final String title;
-  final String author;
+  final String? path;
   final Color coverColor;
   bool isFavorite;
 
   BookItem({
     required this.id,
     required this.title,
-    required this.author,
+    this.path,
     required this.coverColor,
     this.isFavorite = false,
   });
 }
 
-// メイン本棚画面
 class MainShelfScreen extends StatefulWidget {
   const MainShelfScreen({super.key});
 
@@ -54,25 +55,28 @@ class MainShelfScreen extends StatefulWidget {
 }
 
 class _MainShelfScreenState extends State<MainShelfScreen> {
-  final List<BookItem> _books = [
-    BookItem(id: '1', title: 'サンプル文書 1', author: '著者 A', coverColor: Colors.teal),
-    BookItem(id: '2', title: 'マニュアル PDF', author: '公式ガイド', coverColor: Colors.indigo),
-    BookItem(id: '3', title: 'プロジェクト資料', author: 'チーム B', coverColor: Colors.deepOrange),
-    BookItem(id: '4', title: 'デザイン設計書', author: 'デザイナー C', coverColor: Colors.brown),
-  ];
+  final List<BookItem> _books = [];
 
-  void _addNewBook() {
-    setState(() {
-      final newId = (_books.length + 1).toString();
-      _books.add(
-        BookItem(
-          id: newId,
-          title: '新規ドキュメント $newId',
-          author: 'マイフォルダ',
-          coverColor: Colors.blueGrey,
-        ),
-      );
-    });
+  // 端末からPDFを選択して追加する関数
+  Future<void> _pickPDFFile() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf'],
+    );
+
+    if (result != null && result.files.single.path != null) {
+      PlatformFile file = result.files.single;
+      setState(() {
+        _books.add(
+          BookItem(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            title: file.name,
+            path: file.path,
+            coverColor: Colors.brown.shade700,
+          ),
+        );
+      });
+    }
   }
 
   @override
@@ -81,19 +85,12 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
       appBar: AppBar(
         title: const Text('SideBooks 本棚'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () {},
-          ),
-          IconButton(
-            icon: const Icon(Icons.sort),
-            onPressed: () {},
-          ),
+          IconButton(icon: const Icon(Icons.search), onPressed: () {}),
+          IconButton(icon: const Icon(Icons.sort), onPressed: () {}),
         ],
       ),
       body: Column(
         children: [
-          // 棚の装飾ヘッダー
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             color: const Color(0xFF8D6E63),
@@ -108,107 +105,88 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
               ],
             ),
           ),
-          // 本棚グリッド
           Expanded(
-            child: GridView.builder(
-              padding: const EdgeInsets.all(16),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                childAspectRatio: 0.65,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-              ),
-              itemCount: _books.length,
-              itemBuilder: (context, index) {
-                final book = _books[index];
-                return GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => BookViewerScreen(book: book),
-                      ),
-                    );
-                  },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: book.coverColor,
-                      borderRadius: BorderRadius.circular(6),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Colors.black26,
-                          blurRadius: 4,
-                          offset: Offset(2, 4),
-                        ),
-                      ],
+            child: _books.isEmpty
+                ? const Center(
+                    child: Text(
+                      '右下の「+」ボタンから\nPDFファイルを追加してください',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey, fontSize: 16),
                     ),
-                    child: Stack(
-                      children: [
-                        // 背表紙風デザイン
-                        Positioned(
-                          left: 0,
-                          top: 0,
-                          bottom: 0,
-                          width: 8,
-                          child: Container(
-                            color: Colors.black12,
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Spacer(),
-                              Text(
-                                book.title,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
+                  )
+                : GridView.builder(
+                    padding: const EdgeInsets.all(16),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      childAspectRatio: 0.65,
+                      crossAxisSpacing: 16,
+                      mainAxisSpacing: 16,
+                    ),
+                    itemCount: _books.length,
+                    itemBuilder: (context, index) {
+                      final book = _books[index];
+                      return GestureDetector(
+                        onTap: () {
+                          if (book.path != null) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => PDFViewerScreen(book: book),
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                book.author,
-                                style: const TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 10,
+                            );
+                          }
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: book.coverColor,
+                            borderRadius: BorderRadius.circular(6),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Colors.black26,
+                                blurRadius: 4,
+                                offset: Offset(2, 4),
+                              ),
+                            ],
+                          ),
+                          child: Stack(
+                            children: [
+                              Positioned(
+                                left: 0,
+                                top: 0,
+                                bottom: 0,
+                                width: 8,
+                                child: Container(color: Colors.black12),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Spacer(),
+                                    Text(
+                                      book.title,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                      maxLines: 3,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
                                 ),
-                                maxLines: 1,
                               ),
                             ],
                           ),
                         ),
-                        Positioned(
-                          top: 4,
-                          right: 4,
-                          child: GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                book.isFavorite = !book.isFavorite;
-                              });
-                            },
-                            child: Icon(
-                              book.isFavorite ? Icons.star : Icons.star_border,
-                              color: Colors.amber,
-                              size: 20,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
-                );
-              },
-            ),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _addNewBook,
+        onPressed: _pickPDFFile,
         backgroundColor: const Color(0xFF5D4037),
         child: const Icon(Icons.add, color: Colors.white),
       ),
@@ -216,103 +194,62 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
   }
 }
 
-// ドキュメント閲覧画面 (Viewer)
-class BookViewerScreen extends StatefulWidget {
+// PDF表示画面
+class PDFViewerScreen extends StatefulWidget {
   final BookItem book;
 
-  const BookViewerScreen({super.key, required this.book});
+  const PDFViewerScreen({super.key, required this.book});
 
   @override
-  State<BookViewerScreen> createState() => _BookViewerScreenState();
+  State<PDFViewerScreen> createState() => _PDFViewerScreenState();
 }
 
-class _BookViewerScreenState extends State<BookViewerScreen> {
-  int _currentPage = 1;
-  final int _totalPages = 12;
+class _PDFViewerScreenState extends State<PDFViewerScreen> {
+  int _totalPages = 0;
+  int _currentPage = 0;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black87,
       appBar: AppBar(
         title: Text(widget.book.title),
         backgroundColor: Colors.black,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.bookmark_border),
-            onPressed: () {},
+      ),
+      body: Stack(
+        children: [
+          PDFView(
+            filePath: widget.book.path,
+            enableSwipe: true,
+            swipeHorizontal: true, // 横めくり設定
+            autoSpacing: false,
+            pageFling: true,
+            onRender: (pages) {
+              setState(() {
+                _totalPages = pages ?? 0;
+              });
+            },
+            onPageChanged: (page, total) {
+              setState(() {
+                _currentPage = page ?? 0;
+              });
+            },
+          ),
+          Positioned(
+            bottom: 16,
+            left: 16,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.black70,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '${_currentPage + 1} / $_totalPages ページ',
+                style: const TextStyle(color: Colors.white),
+              ),
+            ),
           ),
         ],
-      ),
-      body: PageView.builder(
-        itemCount: _totalPages,
-        onPageChanged: (index) {
-          setState(() {
-            _currentPage = index + 1;
-          });
-        },
-        itemBuilder: (context, index) {
-          return Center(
-            child: Container(
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    '${widget.book.title}',
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    'ページ ${index + 1} / $_totalPages',
-                    style: const TextStyle(fontSize: 16, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 40),
-                  const Icon(
-                    Icons.description,
-                    size: 100,
-                    color: Colors.black38,
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    '左右にスワイプしてページをめくれます。',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-      bottomNavigationBar: Container(
-        color: Colors.black,
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              '$_currentPage / $_totalPages ページ',
-              style: const TextStyle(color: Colors.white),
-            ),
-            Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.zoom_in, color: Colors.white),
-                  onPressed: () {},
-                ),
-                IconButton(
-                  icon: const Icon(Icons.swap_horiz, color: Colors.white),
-                  onPressed: () {},
-                ),
-              ],
-            ),
-          ],
-        ),
       ),
     );
   }
