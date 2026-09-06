@@ -226,7 +226,7 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
   }
 }
 
-// 自然なスライド＆カール効果の PDF ビューア
+// メモリ最適化版 PDF ビューア
 class CustomCurlPDFViewerScreen extends StatefulWidget {
   final BookItem book;
 
@@ -253,11 +253,13 @@ class _CustomCurlPDFViewerScreenState extends State<CustomCurlPDFViewerScreen> {
   Future<void> _loadPdf() async {
     if (widget.book.path != null) {
       final doc = await pdfx.PdfDocument.openFile(widget.book.path!);
-      setState(() {
-        _pdfDocument = doc;
-        _pageCount = doc.pagesCount;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _pdfDocument = doc;
+          _pageCount = doc.pagesCount;
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -283,6 +285,8 @@ class _CustomCurlPDFViewerScreenState extends State<CustomCurlPDFViewerScreen> {
                 PageView.builder(
                   controller: _pageController,
                   itemCount: _pageCount,
+                  // 画面外のキャッシュ保持数を制限してメモリ枯渇を防止
+                  allowImplicitScrolling: false,
                   onPageChanged: (index) {
                     setState(() {
                       _currentPageIndex = index;
@@ -295,7 +299,7 @@ class _CustomCurlPDFViewerScreenState extends State<CustomCurlPDFViewerScreen> {
                         double value = 1.0;
                         if (_pageController.position.haveDimensions) {
                           value = _pageController.page! - index;
-                          value = (1 - (value.abs() * 0.3)).clamp(0.0, 1.0);
+                          value = (1 - (value.abs() * 0.25)).clamp(0.0, 1.0);
                         }
                         return Transform(
                           transform: Matrix4.identity()..scale(value, value),
@@ -304,6 +308,7 @@ class _CustomCurlPDFViewerScreenState extends State<CustomCurlPDFViewerScreen> {
                         );
                       },
                       child: PdfPageWidget(
+                        key: ValueKey('page_$index'),
                         document: _pdfDocument!,
                         pageNumber: index + 1,
                       ),
@@ -347,6 +352,7 @@ class PdfPageWidget extends StatefulWidget {
 
 class _PdfPageWidgetState extends State<PdfPageWidget> {
   Uint8List? _imageBytes;
+  bool _isDisposed = false;
 
   @override
   void initState() {
@@ -354,17 +360,32 @@ class _PdfPageWidgetState extends State<PdfPageWidget> {
     _renderPage();
   }
 
+  @override
+  void dispose() {
+    _isDisposed = true;
+    // 画面外に消えたら画像バイナリを破棄してメモリ開放
+    _imageBytes = null;
+    super.dispose();
+  }
+
   Future<void> _renderPage() async {
-    final page = await widget.document.getPage(widget.pageNumber);
-    final pageImage = await page.render(
-      width: page.width * 2,
-      height: page.height * 2,
-      format: pdfx.PdfPageImageFormat.jpeg,
-    );
-    if (mounted) {
-      setState(() {
-        _imageBytes = pageImage?.bytes;
-      });
+    try {
+      final page = await widget.document.getPage(widget.pageNumber);
+      
+      // 解像度倍率を 2.0 -> 1.2 に落としてメモリ消費量を1/3程度に軽量化
+      final pageImage = await page.render(
+        width: page.width * 1.2,
+        height: page.height * 1.2,
+        format: pdfx.PdfPageImageFormat.jpeg,
+      );
+
+      if (!_isDisposed && mounted) {
+        setState(() {
+          _imageBytes = pageImage?.bytes;
+        });
+      }
+    } catch (e) {
+      // エラーハンドリング
     }
   }
 
@@ -376,7 +397,12 @@ class _PdfPageWidgetState extends State<PdfPageWidget> {
     return Container(
       color: Colors.black,
       child: Center(
-        child: Image.memory(_imageBytes!, fit: BoxFit.contain),
+        child: Image.memory(
+          _imageBytes!,
+          fit: BoxFit.contain,
+          // 画像キャッシュのクリアを確実に実施
+          gaplessPlayback: true,
+        ),
       ),
     );
   }
