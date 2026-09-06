@@ -13,7 +13,6 @@ dependencies:
   cupertino_icons: ^1.0.6
   file_picker: ^8.0.0
   pdfx: ^2.6.0
-  page_flip: ^0.2.2
 
 dev_dependencies:
   flutter_test:
@@ -22,3 +21,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  shaders:
+    - shaders/page_curl.frag
