@@ -1,9 +1,9 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
-import 'package:page_flip/page_flip.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -154,7 +154,7 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => CurlPDFViewerScreen(book: book),
+                                builder: (context) => RealCurlPDFViewerScreen(book: book),
                               ),
                             );
                           }
@@ -228,21 +228,25 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
   }
 }
 
-class CurlPDFViewerScreen extends StatefulWidget {
+// リアル3Dカール・シャドウアニメーション表示画面
+class RealCurlPDFViewerScreen extends StatefulWidget {
   final BookItem book;
 
-  const CurlPDFViewerScreen({super.key, required this.book});
+  const RealCurlPDFViewerScreen({super.key, required this.book});
 
   @override
-  State<CurlPDFViewerScreen> createState() => _CurlPDFViewerScreenState();
+  State<RealCurlPDFViewerScreen> createState() => _RealCurlPDFViewerScreenState();
 }
 
-class _CurlPDFViewerScreenState extends State<CurlPDFViewerScreen> {
+class _RealCurlPDFViewerScreenState extends State<RealCurlPDFViewerScreen> {
   pdfx.PdfDocument? _pdfDocument;
   int _pageCount = 0;
   int _currentPageIndex = 0;
   bool _isLoading = true;
-  final _controller = GlobalKey<PageFlipWidgetState>();
+
+  double _dragProgress = 0.0; // 0.0 ~ 1.0 めくり進行度
+  bool _isDragging = false;
+  bool _isNextPage = true; // 右開き方向
 
   @override
   void initState() {
@@ -274,46 +278,118 @@ class _CurlPDFViewerScreenState extends State<CurlPDFViewerScreen> {
     super.dispose();
   }
 
+  void _onHorizontalDragUpdate(DragUpdateDetails details, double screenWidth) {
+    setState(() {
+      _isDragging = true;
+      // 右から左へ（次のページ）
+      _dragProgress -= details.delta.dx / screenWidth;
+      _dragProgress = _dragProgress.clamp(-1.0, 1.0);
+    });
+  }
+
+  void _onHorizontalDragEnd(DragEndDetails details) {
+    setState(() {
+      _isDragging = false;
+      if (_dragProgress > 0.3 && _currentPageIndex < _pageCount - 1) {
+        _currentPageIndex++;
+      } else if (_dragProgress < -0.3 && _currentPageIndex > 0) {
+        _currentPageIndex--;
+      }
+      _dragProgress = 0.0;
+      PaintingBinding.instance.imageCache.clear();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+
     return Scaffold(
-      backgroundColor: Colors.grey.shade900,
+      backgroundColor: const Color(0xFF212121),
       appBar: AppBar(
         title: Text(widget.book.title),
         backgroundColor: Colors.black,
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
-          : Stack(
-              children: [
-                PageFlipWidget(
-                  key: _controller,
-                  backgroundColor: Colors.grey.shade900,
-                  isRightSwipe: true, // 右開き（右から左へめくる）
-                  children: List.generate(_pageCount, (index) {
-                    return SinglePdfPageWidget(
-                      key: ValueKey('page_${widget.book.id}_$index'),
-                      document: _pdfDocument!,
-                      pageNumber: index + 1,
-                    );
-                  }),
-                ),
-                Positioned(
-                  bottom: 16,
-                  left: 16,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.black87,
-                      borderRadius: BorderRadius.circular(12),
+          : GestureDetector(
+              onHorizontalDragUpdate: (details) => _onHorizontalDragUpdate(details, screenWidth),
+              onHorizontalDragEnd: _onHorizontalDragEnd,
+              child: Stack(
+                children: [
+                  // ベース（現在のページ）
+                  SinglePdfPageWidget(
+                    key: ValueKey('page_${_currentPageIndex}'),
+                    document: _pdfDocument!,
+                    pageNumber: _currentPageIndex + 1,
+                  ),
+
+                  // めくられている最中のページと3Dカール影
+                  if (_isDragging && _dragProgress != 0.0) ...[
+                    // 背面の影（捲れた下のページに落ちる影）
+                    Positioned.fill(
+                      child: Container(
+                        color: Colors.black.withOpacity((_dragProgress.abs() * 0.4).clamp(0.0, 0.4)),
+                      ),
                     ),
-                    child: Text(
-                      '${_currentPageIndex + 1} / $_pageCount ページ',
-                      style: const TextStyle(color: Colors.white),
+
+                    // カールする紙（3D変形と湾曲シャドウ）
+                    Transform(
+                      transform: Matrix4.identity()
+                        ..setEntry(3, 2, 0.001) // 遠近感
+                        ..rotateY(_dragProgress * math.pi * 0.45), // しなり回転
+                      alignment: _dragProgress > 0 ? Alignment.centerLeft : Alignment.centerRight,
+                      child: Stack(
+                        children: [
+                          SinglePdfPageWidget(
+                            key: ValueKey('curl_page_${_currentPageIndex}'),
+                            document: _pdfDocument!,
+                            pageNumber: (_dragProgress > 0
+                                    ? (_currentPageIndex + 1).clamp(0, _pageCount - 1)
+                                    : (_currentPageIndex - 1).clamp(0, _pageCount - 1)) +
+                                1,
+                          ),
+                          // 本物の紙の立体感（画像の中央の黒い折り目グラデーション）
+                          Positioned.fill(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.centerLeft,
+                                  end: Alignment.centerRight,
+                                  colors: [
+                                    Colors.black.withOpacity(0.5),
+                                    Colors.transparent,
+                                    Colors.white.withOpacity(0.2),
+                                    Colors.black.withOpacity(0.4),
+                                  ],
+                                  stops: const [0.0, 0.15, 0.85, 1.0],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  // ページ数インジケーター
+                  Positioned(
+                    bottom: 16,
+                    left: 16,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.black87,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${_currentPageIndex + 1} / $_pageCount ページ',
+                        style: const TextStyle(color: Colors.white),
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
     );
   }
