@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:pdfx/pdfx.dart';
 import 'package:archive/archive.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
@@ -34,16 +33,9 @@ class BookViewerPage extends StatefulWidget {
 }
 
 class _BookViewerPageState extends State<BookViewerPage> {
-  PdfControllerPinch? _pdfController;
   List<String> _extractedImages = [];
   bool _isLoading = false;
   String _loadingText = '';
-
-  @override
-  void dispose() {
-    _pdfController?.dispose();
-    super.dispose();
-  }
 
   Future<void> _pickFile() async {
     try {
@@ -56,20 +48,12 @@ class _BookViewerPageState extends State<BookViewerPage> {
         final path = result.files.single.path!;
         final extension = p.extension(path).toLowerCase();
 
-        if (extension == '.pdf') {
-          _pdfController?.dispose();
-          setState(() {
-            _pdfController = PdfControllerPinch(
-              document: PdfDocument.openFile(path),
-            );
-            _extractedImages = [];
-          });
-        } else if (extension == '.zip') {
+        if (extension == '.zip') {
           await _extractZip(path);
         } else {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('PDFまたはZIPファイルを選択してください')),
+              const SnackBar(content: Text('ZIPファイルを選択してください')),
             );
           }
         }
@@ -114,9 +98,7 @@ class _BookViewerPageState extends State<BookViewerPage> {
 
       imagePaths.sort();
 
-      _pdfController?.dispose();
       setState(() {
-        _pdfController = null;
         _extractedImages = imagePaths;
       });
     } catch (e) {
@@ -155,41 +137,37 @@ class _BookViewerPageState extends State<BookViewerPage> {
                 ],
               ),
             )
-          : _pdfController != null
-              ? PdfViewPinch(
-                  controller: _pdfController!,
-                )
-              : _extractedImages.isNotEmpty
-                  ? PageView.builder(
-                      itemCount: _extractedImages.length,
-                      itemBuilder: (context, index) {
-                        return Container(
-                          color: Colors.black,
-                          child: Center(
-                            child: Image.file(
-                              File(_extractedImages[index]),
-                              fit: BoxFit.contain,
-                            ),
-                          ),
-                        );
-                      },
-                    )
-                  : Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.menu_book, size: 80, color: Colors.grey),
-                          const SizedBox(height: 16),
-                          const Text('PDFまたはZIPファイルを選択してください'),
-                          const SizedBox(height: 16),
-                          ElevatedButton.icon(
-                            onPressed: _pickFile,
-                            icon: const Icon(Icons.folder_open),
-                            label: const Text('ファイルを開く'),
-                          ),
-                        ],
+          : _extractedImages.isNotEmpty
+              ? PageView.builder(
+                  itemCount: _extractedImages.length,
+                  itemBuilder: (context, index) {
+                    return Container(
+                      color: Colors.black,
+                      child: Center(
+                        child: Image.file(
+                          File(_extractedImages[index]),
+                          fit: BoxFit.contain,
+                        ),
                       ),
-                    ),
+                    );
+                  },
+                )
+              : Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.menu_book, size: 80, color: Colors.grey),
+                      const SizedBox(height: 16),
+                      const Text('ZIPファイルを選択してください'),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: _pickFile,
+                        icon: const Icon(Icons.folder_open),
+                        label: const Text('ファイルを開く'),
+                      ),
+                    ],
+                  ),
+                ),
     );
   }
 }
