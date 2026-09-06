@@ -3,11 +3,11 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
-import 'package:flutter_page_curl/flutter_page_curl.dart';
+import 'package:page_flip/page_flip.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  PaintingBinding.instance.imageCache.maximumSizeBytes = 1024 * 1024 * 32; // メモリ枯渇防止
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 1024 * 1024 * 32;
   runApp(const SideBooksApp());
 }
 
@@ -228,7 +228,6 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
   }
 }
 
-// リアル3Dページカール表示スクリーン
 class CurlPDFViewerScreen extends StatefulWidget {
   final BookItem book;
 
@@ -243,6 +242,7 @@ class _CurlPDFViewerScreenState extends State<CurlPDFViewerScreen> {
   int _pageCount = 0;
   int _currentPageIndex = 0;
   bool _isLoading = true;
+  final _controller = GlobalKey<PageFlipWidgetState>();
 
   @override
   void initState() {
@@ -286,22 +286,17 @@ class _CurlPDFViewerScreenState extends State<CurlPDFViewerScreen> {
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
           : Stack(
               children: [
-                PageCurl(
-                  backColor: Colors.grey.shade300,
-                  count: _pageCount,
-                  onChange: (index) {
-                    setState(() {
-                      _currentPageIndex = index;
-                    });
-                    PaintingBinding.instance.imageCache.clear();
-                  },
-                  itemBuilder: (context, index) {
+                PageFlipWidget(
+                  key: _controller,
+                  backgroundColor: Colors.grey.shade900,
+                  isRightSwipe: true, // 右開き（右から左へめくる）
+                  children: List.generate(_pageCount, (index) {
                     return SinglePdfPageWidget(
                       key: ValueKey('page_${widget.book.id}_$index'),
                       document: _pdfDocument!,
                       pageNumber: index + 1,
                     );
-                  },
+                  }),
                 ),
                 Positioned(
                   bottom: 16,
@@ -357,8 +352,8 @@ class _SinglePdfPageWidgetState extends State<SinglePdfPageWidget> {
     try {
       final page = await widget.document.getPage(widget.pageNumber);
       final pageImage = await page.render(
-        width: page.width * 1.5,
-        height: page.height * 1.5,
+        width: page.width,
+        height: page.height,
         format: pdfx.PdfPageImageFormat.jpeg,
       );
 
