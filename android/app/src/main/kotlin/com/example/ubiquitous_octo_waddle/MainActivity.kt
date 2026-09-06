@@ -1,4 +1,4 @@
-package com.example.sidebooks_clone
+package com.example.ubiquitous_octo_waddle
 
 import io.flutter.embedding.android.FlutterActivity
 
