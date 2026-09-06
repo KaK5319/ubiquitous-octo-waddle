@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -38,14 +37,14 @@ class SideBooksApp extends StatelessWidget {
 class BookItem {
   final String id;
   final String title;
-  final String? path;
+  final String path;
   final Color coverColor;
   Uint8List? thumbnail;
 
   BookItem({
     required this.id,
     required this.title,
-    this.path,
+    required this.path,
     required this.coverColor,
     this.thumbnail,
   });
@@ -80,26 +79,32 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
   }
 
   Future<void> _pickPDFFile() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf'],
-    );
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
 
-    if (result != null && result.files.single.path != null) {
-      PlatformFile file = result.files.single;
-      final thumbnailBytes = await _generateThumbnail(file.path!);
+      if (result != null && result.files.single.path != null) {
+        PlatformFile file = result.files.single;
+        final thumbnailBytes = await _generateThumbnail(file.path!);
 
-      setState(() {
-        _books.add(
-          BookItem(
-            id: DateTime.now().millisecondsSinceEpoch.toString(),
-            title: file.name,
-            path: file.path,
-            coverColor: Colors.brown.shade700,
-            thumbnail: thumbnailBytes,
-          ),
-        );
-      });
+        setState(() {
+          _books.add(
+            BookItem(
+              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              title: file.name,
+              path: file.path!,
+              coverColor: Colors.brown.shade700,
+              thumbnail: thumbnailBytes,
+            ),
+          );
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('ファイル選択エラー: $e')),
+      );
     }
   }
 
@@ -151,14 +156,12 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
                       final book = _books[index];
                       return GestureDetector(
                         onTap: () {
-                          if (book.path != null) {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => PDFViewerScreen(book: book),
-                              ),
-                            );
-                          }
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => SafePDFViewerScreen(book: book),
+                            ),
+                          );
                         },
                         child: Container(
                           decoration: BoxDecoration(
@@ -229,58 +232,47 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
   }
 }
 
-class PDFViewerScreen extends StatefulWidget {
+class SafePDFViewerScreen extends StatefulWidget {
   final BookItem book;
-  const PDFViewerScreen({super.key, required this.book});
+  const SafePDFViewerScreen({super.key, required this.book});
 
   @override
-  State<PDFViewerScreen> createState() => _PDFViewerScreenState();
+  State<SafePDFViewerScreen> createState() => _SafePDFViewerScreenState();
 }
 
-class _PDFViewerScreenState extends State<PDFViewerScreen> {
+class _SafePDFViewerScreenState extends State<SafePDFViewerScreen> {
   pdfx.PdfDocument? _pdfDocument;
   int _pageCount = 0;
   int _currentPageIndex = 0;
   bool _isLoading = true;
+  String? _errorMessage;
 
-  ui.FragmentShader? _shader;
   double _dragProgress = 0.0;
   bool _isDragging = false;
-  bool _isShaderFailed = false;
 
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _loadPdf();
   }
 
-  Future<void> _loadData() async {
-    // 1. PDFを先に読み込む（ここで失敗させない）
-    if (widget.book.path != null) {
-      try {
-        final doc = await pdfx.PdfDocument.openFile(widget.book.path!);
-        if (mounted) {
+  Future<void> _loadPdf() async {
+    try {
+      final doc = await pdfx.PdfDocument.openFile(widget.book.path);
+      if (mounted) {
+        setState(() {
           _pdfDocument = doc;
           _pageCount = doc.pagesCount;
-        }
-      } catch (e) {
-        if (mounted) Navigator.pop(context);
-        return;
+          _isLoading = false;
+        });
       }
-    }
-
-    // 2. シェーダーの読み込みを試行（失敗しても真っ暗にさせない）
-    try {
-      final program = await ui.FragmentProgram.fromAsset('shaders/page_curl.frag');
-      _shader = program.fragmentShader();
     } catch (e) {
-      _isShaderFailed = true; // エラーを検知したら予備モードへ
-    }
-
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'PDFを開けませんでした:\n$e';
+        });
+      }
     }
   }
 
@@ -292,23 +284,21 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
   }
 
   void _onHorizontalDragUpdate(DragUpdateDetails details, double screenWidth) {
+    if (_pageCount == 0) return;
     setState(() {
       _isDragging = true;
       _dragProgress -= details.delta.dx / screenWidth;
-      if (_shader != null) {
-        _dragProgress = _dragProgress.clamp(0.0, 1.0);
-      } else {
-        _dragProgress = _dragProgress.clamp(-1.0, 1.0);
-      }
+      _dragProgress = _dragProgress.clamp(-1.0, 1.0);
     });
   }
 
   void _onHorizontalDragEnd(DragEndDetails details) {
+    if (_pageCount == 0) return;
     setState(() {
       _isDragging = false;
       if (_dragProgress > 0.3 && _currentPageIndex < _pageCount - 1) {
         _currentPageIndex++;
-      } else if (_dragProgress < -0.3 && _currentPageIndex > 0 && _shader == null) {
+      } else if (_dragProgress < -0.3 && _currentPageIndex > 0) {
         _currentPageIndex--;
       }
       _dragProgress = 0.0;
@@ -328,146 +318,77 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
-          : GestureDetector(
-              onHorizontalDragUpdate: (details) => _onHorizontalDragUpdate(details, screenWidth),
-              onHorizontalDragEnd: _onHorizontalDragEnd,
-              child: Stack(
-                children: [
-                  // 描画モードの切り替え（シェーダー成功時はリアル3D、失敗時は予備3D）
-                  _shader != null
-                      ? _buildShaderCurl(screenWidth)
-                      : _buildFallbackCurl(screenWidth),
-
-                  // シェーダー失敗時の通知
-                  if (_isShaderFailed)
-                    Positioned(
-                      top: 16,
-                      left: 16,
-                      right: 16,
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.redAccent.withOpacity(0.9),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Text(
-                          'ファイル不足により予備の3Dモードで表示しています',
-                          style: TextStyle(color: Colors.white, fontSize: 12),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-
-                  // ページ数
-                  Positioned(
-                    bottom: 16,
-                    left: 16,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.black87,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '${_currentPageIndex + 1} / $_pageCount ページ',
-                        style: const TextStyle(color: Colors.white),
-                      ),
+          : _errorMessage != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Text(
+                      _errorMessage!,
+                      style: const TextStyle(color: Colors.redAccent, fontSize: 16),
+                      textAlign: TextAlign.center,
                     ),
                   ),
-                ],
-              ),
-            ),
-    );
-  }
-
-  Widget _buildShaderCurl(double screenWidth) {
-    return Stack(
-      children: [
-        if (_currentPageIndex + 1 < _pageCount)
-          SinglePdfPageWidget(
-            key: ValueKey('page_${_currentPageIndex + 1}'),
-            document: _pdfDocument!,
-            pageNumber: _currentPageIndex + 2,
-          ),
-        CustomPaint(
-          size: Size.infinite,
-          painter: CurlShaderPainter(
-            shader: _shader!,
-            progress: _dragProgress,
-          ),
-          child: SinglePdfPageWidget(
-            key: ValueKey('page_${_currentPageIndex}'),
-            document: _pdfDocument!,
-            pageNumber: _currentPageIndex + 1,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFallbackCurl(double screenWidth) {
-    return Stack(
-      children: [
-        SinglePdfPageWidget(
-          key: ValueKey('fallback_page_${_currentPageIndex}'),
-          document: _pdfDocument!,
-          pageNumber: _currentPageIndex + 1,
-        ),
-        if (_isDragging && _dragProgress != 0.0)
-          Transform(
-            transform: Matrix4.identity()
-              ..setEntry(3, 2, 0.001)
-              ..rotateY(_dragProgress * math.pi * 0.45),
-            alignment: _dragProgress > 0 ? Alignment.centerLeft : Alignment.centerRight,
-            child: Stack(
-              children: [
-                SinglePdfPageWidget(
-                  key: ValueKey('fallback_curl_${_currentPageIndex}'),
-                  document: _pdfDocument!,
-                  pageNumber: (_dragProgress > 0
-                          ? (_currentPageIndex + 1).clamp(0, _pageCount - 1)
-                          : (_currentPageIndex - 1).clamp(0, _pageCount - 1)) +
-                      1,
-                ),
-                Positioned.fill(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.black.withOpacity(0.5),
-                          Colors.transparent,
-                        ],
+                )
+              : GestureDetector(
+                  onHorizontalDragUpdate: (details) => _onHorizontalDragUpdate(details, screenWidth),
+                  onHorizontalDragEnd: _onHorizontalDragEnd,
+                  child: Stack(
+                    children: [
+                      SinglePdfPageWidget(
+                        key: ValueKey('page_${_currentPageIndex}'),
+                        document: _pdfDocument!,
+                        pageNumber: _currentPageIndex + 1,
                       ),
-                    ),
+                      if (_isDragging && _dragProgress != 0.0)
+                        Transform(
+                          transform: Matrix4.identity()
+                            ..setEntry(3, 2, 0.001)
+                            ..rotateY(_dragProgress * math.pi * 0.45),
+                          alignment: _dragProgress > 0 ? Alignment.centerLeft : Alignment.centerRight,
+                          child: Stack(
+                            children: [
+                              SinglePdfPageWidget(
+                                key: ValueKey('curl_page_${_currentPageIndex}'),
+                                document: _pdfDocument!,
+                                pageNumber: (_dragProgress > 0
+                                        ? (_currentPageIndex + 1).clamp(0, _pageCount - 1)
+                                        : (_currentPageIndex - 1).clamp(0, _pageCount - 1)) +
+                                    1,
+                              ),
+                              Positioned.fill(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        Colors.black.withOpacity(0.5),
+                                        Colors.transparent,
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      Positioned(
+                        bottom: 16,
+                        left: 16,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.black87,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '${_currentPageIndex + 1} / $_pageCount ページ',
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-          ),
-      ],
     );
-  }
-}
-
-class CurlShaderPainter extends CustomPainter {
-  final ui.FragmentShader shader;
-  final double progress;
-
-  CurlShaderPainter({required this.shader, required this.progress});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    shader.setFloat(0, size.width);
-    shader.setFloat(1, size.height);
-    shader.setFloat(2, progress);
-
-    final paint = Paint()..shader = shader;
-    canvas.drawRect(Offset.zero & size, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CurlShaderPainter oldDelegate) {
-    return oldDelegate.progress != progress;
   }
 }
 
@@ -515,7 +436,7 @@ class _SinglePdfPageWidgetState extends State<SinglePdfPageWidget> {
         });
       }
     } catch (e) {
-      // エラー無視
+      // エラーハンドリング
     }
   }
 
