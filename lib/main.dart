@@ -1,18 +1,17 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:pdfx/pdfx.dart' as pdfx;
+import 'package:pdfx/pdfx.dart';
 import 'package:page_flip/page_flip.dart';
 
 void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  PaintingBinding.instance.imageCache.maximumSizeBytes = 1024 * 1024 * 32;
-  runApp(const SideBooksApp());
+  // 起動時のプラグイン初期化エラー（クラッシュ）を防止
+  WidgetsBinding platformBinding = WidgetsFlutterBinding.ensureInitialized();
+  runApp(const MyApp());
 }
 
-class SideBooksApp extends StatelessWidget {
-  const SideBooksApp({super.key});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -20,65 +19,25 @@ class SideBooksApp extends StatelessWidget {
       title: 'SideBooks Clone',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        brightness: Brightness.light,
-        primarySwatch: Colors.brown,
-        scaffoldBackgroundColor: const Color(0xFFF4EFEA),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF5D4037),
-          foregroundColor: Colors.white,
-          elevation: 2,
-        ),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.brown),
+        useMaterial3: true,
       ),
-      home: const MainShelfScreen(),
+      home: const BookshelfScreen(),
     );
   }
 }
 
-class BookItem {
-  final String id;
-  final String title;
-  final String path;
-  final Color coverColor;
-  Uint8List? thumbnail;
-
-  BookItem({
-    required this.id,
-    required this.title,
-    required this.path,
-    required this.coverColor,
-    this.thumbnail,
-  });
-}
-
-class MainShelfScreen extends StatefulWidget {
-  const MainShelfScreen({super.key});
+class BookshelfScreen extends StatefulWidget {
+  const BookshelfScreen({super.key});
 
   @override
-  State<MainShelfScreen> createState() => _MainShelfScreenState();
+  State<BookshelfScreen> createState() => _BookshelfScreenState();
 }
 
-class _MainShelfScreenState extends State<MainShelfScreen> {
-  final List<BookItem> _books = [];
+class _BookshelfScreenState extends State<BookshelfScreen> {
+  final List<File> _pdfFiles = [];
 
-  Future<Uint8List?> _generateThumbnail(String filePath) async {
-    pdfx.PdfDocument? document;
-    try {
-      document = await pdfx.PdfDocument.openFile(filePath);
-      final page = await document.getPage(1);
-      final pageImage = await page.render(
-        width: page.width / 4,
-        height: page.height / 4,
-        format: pdfx.PdfPageImageFormat.jpeg,
-      );
-      return pageImage?.bytes;
-    } catch (e) {
-      return null;
-    } finally {
-      await document?.close();
-    }
-  }
-
-  Future<void> _pickPDFFile() async {
+  Future<void> _pickPDF() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
@@ -86,165 +45,107 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
       );
 
       if (result != null && result.files.single.path != null) {
-        PlatformFile file = result.files.single;
-        final thumbnailBytes = await _generateThumbnail(file.path!);
-
         setState(() {
-          _books.add(
-            BookItem(
-              id: DateTime.now().millisecondsSinceEpoch.toString(),
-              title: file.name,
-              path: file.path!,
-              coverColor: Colors.brown.shade700,
-              thumbnail: thumbnailBytes,
-            ),
-          );
+          _pdfFiles.add(File(result.files.single.path!));
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('ファイル選択エラー: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('ファイル選択エラー: $e')),
+        );
+      }
     }
+  }
+
+  void _openPdf(File file) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => PdfViewerScreen(pdfFile: file),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('SideBooks 本棚'),
+        title: const Text('本棚'),
         actions: [
-          IconButton(icon: const Icon(Icons.search), onPressed: () {}),
-          IconButton(icon: const Icon(Icons.sort), onPressed: () {}),
+          IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: _pickPDF,
+            tooltip: 'PDFを追加',
+          ),
         ],
       ),
-      body: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: const Color(0xFF8D6E63),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'すべての本 (${_books.length})',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                ),
-                const Icon(Icons.grid_view, color: Colors.white),
-              ],
-            ),
-          ),
-          Expanded(
-            child: _books.isEmpty
-                ? const Center(
-                    child: Text(
-                      '右下の「+」ボタンから\nPDFファイルを追加してください',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey, fontSize: 16),
-                    ),
-                  )
-                : GridView.builder(
-                    padding: const EdgeInsets.all(16),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      childAspectRatio: 0.65,
-                      crossAxisSpacing: 16,
-                      mainAxisSpacing: 16,
-                    ),
-                    itemCount: _books.length,
-                    itemBuilder: (context, index) {
-                      final book = _books[index];
-                      return GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => PageFlipPDFViewerScreen(book: book),
-                            ),
-                          );
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: book.coverColor,
-                            borderRadius: BorderRadius.circular(6),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Colors.black26,
-                                blurRadius: 4,
-                                offset: Offset(2, 4),
-                              ),
-                            ],
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(6),
-                            child: Stack(
-                              children: [
-                                if (book.thumbnail != null)
-                                  Positioned.fill(
-                                    child: Image.memory(
-                                      book.thumbnail!,
-                                      fit: BoxFit.cover,
-                                    ),
-                                  )
-                                else
-                                  Padding(
-                                    padding: const EdgeInsets.all(8.0),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        const Spacer(),
-                                        Text(
-                                          book.title,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 12,
-                                          ),
-                                          maxLines: 3,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                Positioned(
-                                  left: 0,
-                                  top: 0,
-                                  bottom: 0,
-                                  width: 6,
-                                  child: Container(color: Colors.black26),
-                                ),
-                              ],
-                            ),
+      body: _pdfFiles.isEmpty
+          ? const Center(
+              child: Text(
+                '右上の「+」ボタンから\nPDFファイルを追加してください',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16, color: Colors.grey),
+              ),
+            )
+          : GridView.builder(
+              padding: const EdgeInsets.all(16),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 0.7,
+              ),
+              itemCount: _pdfFiles.length,
+              itemBuilder: (context, index) {
+                final file = _pdfFiles[index];
+                final fileName = file.path.split('/').last;
+
+                return GestureDetector(
+                  onTap: () => _openPdf(file),
+                  child: Card(
+                    elevation: 4,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.picture_as_pdf,
+                          size: 48,
+                          color: Colors.redAccent,
+                        ),
+                        const SizedBox(height: 8),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                          child: Text(
+                            fileName,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 12),
                           ),
                         ),
-                      );
-                    },
+                      ],
+                    ),
                   ),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _pickPDFFile,
-        backgroundColor: const Color(0xFF5D4037),
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
+                );
+              },
+            ),
     );
   }
 }
 
-class PageFlipPDFViewerScreen extends StatefulWidget {
-  final BookItem book;
-  const PageFlipPDFViewerScreen({super.key, required this.book});
+class PdfViewerScreen extends StatefulWidget {
+  final File pdfFile;
+
+  const PdfViewerScreen({super.key, required this.pdfFile});
 
   @override
-  State<PageFlipPDFViewerScreen> createState() => _PageFlipPDFViewerScreenState();
+  State<PdfViewerScreen> createState() => _PdfViewerScreenState();
 }
 
-class _PageFlipPDFViewerScreenState extends State<PageFlipPDFViewerScreen> {
-  final _controller = GlobalKey<PageFlipWidgetState>();
-  pdfx.PdfDocument? _pdfDocument;
+class _PdfViewerScreenState extends State<PdfViewerScreen> {
+  final GlobalKey<PageFlipWidgetState> _controller = GlobalKey<PageFlipWidgetState>();
+  PdfDocument? _pdfDocument;
   int _pageCount = 0;
-  int _currentPageIndex = 0;
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -256,28 +157,23 @@ class _PageFlipPDFViewerScreenState extends State<PageFlipPDFViewerScreen> {
 
   Future<void> _loadPdf() async {
     try {
-      final doc = await pdfx.PdfDocument.openFile(widget.book.path);
-      if (mounted) {
-        setState(() {
-          _pdfDocument = doc;
-          _pageCount = doc.pagesCount;
-          _isLoading = false;
-        });
-      }
+      final doc = await PdfDocument.openFile(widget.pdfFile.path);
+      setState(() {
+        _pdfDocument = doc;
+        _pageCount = doc.pagesCount;
+        _isLoading = false;
+      });
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _errorMessage = 'PDF読み込みエラー:\n$e';
-        });
-      }
+      setState(() {
+        _errorMessage = 'PDFの読み込みに失敗しました: $e';
+        _isLoading = false;
+      });
     }
   }
 
   @override
   void dispose() {
     _pdfDocument?.close();
-    PaintingBinding.instance.imageCache.clear();
     super.dispose();
   }
 
@@ -286,18 +182,24 @@ class _PageFlipPDFViewerScreenState extends State<PageFlipPDFViewerScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text(widget.book.title),
-        backgroundColor: Colors.black,
+        backgroundColor: Colors.black.withOpacity(0.5),
+        foregroundColor: Colors.white,
+        title: Text(
+          widget.pdfFile.path.split('/').last,
+          style: const TextStyle(fontSize: 16),
+        ),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Colors.white))
+          ? const Center(
+              child: CircularProgressIndicator(color: Colors.white),
+            )
           : _errorMessage != null
               ? Center(
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Text(
                       _errorMessage!,
-                      style: const TextStyle(color: Colors.redAccent, fontSize: 16),
+                      style: const TextStyle(color: Colors.redAccent),
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -308,29 +210,12 @@ class _PageFlipPDFViewerScreenState extends State<PageFlipPDFViewerScreen> {
                       key: _controller,
                       backgroundColor: Colors.black,
                       initialIndex: 0,
-                      // 指でひっぱってめくるスピードとレスポンスを向上
                       duration: const Duration(milliseconds: 300),
-
                       children: List.generate(
                         _pageCount,
                         (index) => SinglePdfPageWidget(
                           document: _pdfDocument!,
                           pageNumber: index + 1,
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      bottom: 16,
-                      left: 16,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.black87,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          '1 / $_pageCount ページ',
-                          style: const TextStyle(color: Colors.white),
                         ),
                       ),
                     ),
@@ -341,7 +226,7 @@ class _PageFlipPDFViewerScreenState extends State<PageFlipPDFViewerScreen> {
 }
 
 class SinglePdfPageWidget extends StatefulWidget {
-  final pdfx.PdfDocument document;
+  final PdfDocument document;
   final int pageNumber;
 
   const SinglePdfPageWidget({
@@ -355,7 +240,8 @@ class SinglePdfPageWidget extends StatefulWidget {
 }
 
 class _SinglePdfPageWidgetState extends State<SinglePdfPageWidget> {
-  Uint8List? _imageBytes;
+  PdfPageImage? _pageImage;
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -363,51 +249,49 @@ class _SinglePdfPageWidgetState extends State<SinglePdfPageWidget> {
     _renderPage();
   }
 
-  @override
-  void dispose() {
-    _imageBytes = null;
-    super.dispose();
-  }
-
   Future<void> _renderPage() async {
     try {
       final page = await widget.document.getPage(widget.pageNumber);
-      
-      // 画面解像度に合わせて正しく取得
-      final screenWidth = MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio;
-      final scale = screenWidth / page.width;
-
       final pageImage = await page.render(
-        width: page.width * scale,
-        height: page.height * scale,
-        format: pdfx.PdfPageImageFormat.jpeg,
+        width: page.width * 2,
+        height: page.height * 2,
+        format: PdfPageImageFormat.jpeg,
       );
+      await page.close();
 
       if (mounted) {
         setState(() {
-          _imageBytes = pageImage?.bytes;
+          _pageImage = pageImage;
+          _isLoading = false;
         });
       }
     } catch (e) {
-      // エラー処理
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_imageBytes == null) {
-      return Container(
-        color: Colors.black,
-        child: const Center(child: CircularProgressIndicator(color: Colors.white)),
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.white),
       );
     }
-    return Container(
-      color: Colors.black,
-      child: Center(
-        child: Image.memory(
-          _imageBytes!,
-          fit: BoxFit.contain,
-        ),
+
+    if (_pageImage == null) {
+      return const Center(
+        child: Icon(Icons.error_outline, color: Colors.white54, size: 48),
+      );
+    }
+
+    return Center(
+      child: Image.memory(
+        _pageImage!.bytes,
+        fit: BoxFit.contain,
       ),
     );
   }
