@@ -1,14 +1,13 @@
 import 'dart:io';
-import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
+import 'package:page_flip/page_flip.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  // キャッシュサイズを極小にしてクラッシュを完全防止
-  PaintingBinding.instance.imageCache.maximumSizeBytes = 1024 * 1024 * 16;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 1024 * 1024 * 32;
   runApp(const SideBooksApp());
 }
 
@@ -66,10 +65,9 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
     try {
       document = await pdfx.PdfDocument.openFile(filePath);
       final page = await document.getPage(1);
-      // サムネイルは超軽量でレンダリング
       final pageImage = await page.render(
-        width: page.width / 8,
-        height: page.height / 8,
+        width: page.width / 4,
+        height: page.height / 4,
         format: pdfx.PdfPageImageFormat.jpeg,
       );
       return pageImage?.bytes;
@@ -161,7 +159,7 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => UltraSafePDFViewerScreen(book: book),
+                              builder: (context) => PageFlipPDFViewerScreen(book: book),
                             ),
                           );
                         },
@@ -234,23 +232,21 @@ class _MainShelfScreenState extends State<MainShelfScreen> {
   }
 }
 
-class UltraSafePDFViewerScreen extends StatefulWidget {
+class PageFlipPDFViewerScreen extends StatefulWidget {
   final BookItem book;
-  const UltraSafePDFViewerScreen({super.key, required this.book});
+  const PageFlipPDFViewerScreen({super.key, required this.book});
 
   @override
-  State<UltraSafePDFViewerScreen> createState() => _UltraSafePDFViewerScreenState();
+  State<PageFlipPDFViewerScreen> createState() => _PageFlipPDFViewerScreenState();
 }
 
-class _UltraSafePDFViewerScreenState extends State<UltraSafePDFViewerScreen> {
+class _PageFlipPDFViewerScreenState extends State<PageFlipPDFViewerScreen> {
+  final GlobalKey<PageFlipWidgetState> _controller = GlobalKey<PageFlipWidgetState>();
   pdfx.PdfDocument? _pdfDocument;
   int _pageCount = 0;
   int _currentPageIndex = 0;
   bool _isLoading = true;
   String? _errorMessage;
-
-  double _dragProgress = 0.0;
-  bool _isDragging = false;
 
   @override
   void initState() {
@@ -285,33 +281,8 @@ class _UltraSafePDFViewerScreenState extends State<UltraSafePDFViewerScreen> {
     super.dispose();
   }
 
-  void _onHorizontalDragUpdate(DragUpdateDetails details, double screenWidth) {
-    if (_pageCount == 0) return;
-    setState(() {
-      _isDragging = true;
-      _dragProgress -= details.delta.dx / screenWidth;
-      _dragProgress = _dragProgress.clamp(-1.0, 1.0);
-    });
-  }
-
-  void _onHorizontalDragEnd(DragEndDetails details) {
-    if (_pageCount == 0) return;
-    setState(() {
-      _isDragging = false;
-      if (_dragProgress > 0.3 && _currentPageIndex < _pageCount - 1) {
-        _currentPageIndex++;
-      } else if (_dragProgress < -0.3 && _currentPageIndex > 0) {
-        _currentPageIndex--;
-      }
-      _dragProgress = 0.0;
-      PaintingBinding.instance.imageCache.clear();
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -331,64 +302,44 @@ class _UltraSafePDFViewerScreenState extends State<UltraSafePDFViewerScreen> {
                     ),
                   ),
                 )
-              : GestureDetector(
-                  onHorizontalDragUpdate: (details) => _onHorizontalDragUpdate(details, screenWidth),
-                  onHorizontalDragEnd: _onHorizontalDragEnd,
-                  child: Stack(
-                    children: [
-                      SinglePdfPageWidget(
-                        key: ValueKey('page_${_currentPageIndex}'),
-                        document: _pdfDocument!,
-                        pageNumber: _currentPageIndex + 1,
-                      ),
-                      if (_isDragging && _dragProgress != 0.0)
-                        Transform(
-                          transform: Matrix4.identity()
-                            ..setEntry(3, 2, 0.001)
-                            ..rotateY(_dragProgress * math.pi * 0.45),
-                          alignment: _dragProgress > 0 ? Alignment.centerLeft : Alignment.centerRight,
-                          child: Stack(
-                            children: [
-                              SinglePdfPageWidget(
-                                key: ValueKey('curl_page_${_currentPageIndex}'),
-                                document: _pdfDocument!,
-                                pageNumber: (_dragProgress > 0
-                                        ? (_currentPageIndex + 1).clamp(0, _pageCount - 1)
-                                        : (_currentPageIndex - 1).clamp(0, _pageCount - 1)) +
-                                    1,
-                              ),
-                              Positioned.fill(
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        Colors.black.withOpacity(0.5),
-                                        Colors.transparent,
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      Positioned(
-                        bottom: 16,
-                        left: 16,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.black87,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+              : Stack(
+                  children: [
+                    PageFlipWidget(
+                      key: _controller,
+                      backgroundColor: Colors.black,
+                      lastPage: Container(
+                        color: Colors.black,
+                        child: const Center(
                           child: Text(
-                            '${_currentPageIndex + 1} / $_pageCount ページ',
-                            style: const TextStyle(color: Colors.white),
+                            '最後のページです',
+                            style: TextStyle(color: Colors.white, fontSize: 18),
                           ),
                         ),
                       ),
-                    ],
-                  ),
+                      children: List.generate(
+                        _pageCount,
+                        (index) => SinglePdfPageWidget(
+                          document: _pdfDocument!,
+                          pageNumber: index + 1,
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 16,
+                      left: 16,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.black87,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${_currentPageIndex + 1} / $_pageCount ページ',
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
     );
   }
@@ -426,10 +377,12 @@ class _SinglePdfPageWidgetState extends State<SinglePdfPageWidget> {
   Future<void> _renderPage() async {
     try {
       final page = await widget.document.getPage(widget.pageNumber);
-      // メモリ対策: 解像度を落として表示（1/2サイズ）
+      final screenWidth = MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio;
+      final scale = screenWidth / page.width;
+
       final pageImage = await page.render(
-        width: page.width / 2,
-        height: page.height / 2,
+        width: page.width * scale,
+        height: page.height * scale,
         format: pdfx.PdfPageImageFormat.jpeg,
       );
 
@@ -439,7 +392,7 @@ class _SinglePdfPageWidgetState extends State<SinglePdfPageWidget> {
         });
       }
     } catch (e) {
-      // エラー無視
+      // エラー処理
     }
   }
 
@@ -447,12 +400,12 @@ class _SinglePdfPageWidgetState extends State<SinglePdfPageWidget> {
   Widget build(BuildContext context) {
     if (_imageBytes == null) {
       return Container(
-        color: Colors.white,
+        color: Colors.black,
         child: const Center(child: CircularProgressIndicator(color: Colors.brown)),
       );
     }
     return Container(
-      color: Colors.white,
+      color: Colors.black,
       child: Center(
         child: Image.memory(
           _imageBytes!,
