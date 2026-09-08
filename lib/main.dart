@@ -310,7 +310,7 @@ class _PageFlipPDFViewerScreenState extends State<PageFlipPDFViewerScreen> {
                       initialIndex: 0,
                       // 指でひっぱってめくるスピードとレスポンスを向上
                       duration: const Duration(milliseconds: 300),
-                      cutoff: 0.2,
+
                       children: List.generate(
                         _pageCount,
                         (index) => SinglePdfPageWidget(
