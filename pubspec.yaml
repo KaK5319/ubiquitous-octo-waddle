@@ -1,5 +1,5 @@
-name: ubiquitous_octo_waddle
-description: "SideBooks Clone App"
+name: sidebooks_clone
+description: "A SideBooks clone Flutter application."
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -13,6 +13,7 @@ dependencies:
   cupertino_icons: ^1.0.6
   file_picker: ^8.0.0
   pdfx: ^2.6.0
+  page_flip: ^0.2.1
 
 dev_dependencies:
   flutter_test:
@@ -21,5 +22,3 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  shaders:
-    - shaders/page_curl.frag
