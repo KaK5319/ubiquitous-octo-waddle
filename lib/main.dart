@@ -241,7 +241,7 @@ class PageFlipPDFViewerScreen extends StatefulWidget {
 }
 
 class _PageFlipPDFViewerScreenState extends State<PageFlipPDFViewerScreen> {
-  final GlobalKey<PageFlipWidgetState> _controller = GlobalKey<PageFlipWidgetState>();
+  final _controller = GlobalKey<PageFlipWidgetState>();
   pdfx.PdfDocument? _pdfDocument;
   int _pageCount = 0;
   int _currentPageIndex = 0;
@@ -307,15 +307,10 @@ class _PageFlipPDFViewerScreenState extends State<PageFlipPDFViewerScreen> {
                     PageFlipWidget(
                       key: _controller,
                       backgroundColor: Colors.black,
-                      lastPage: Container(
-                        color: Colors.black,
-                        child: const Center(
-                          child: Text(
-                            '最後のページです',
-                            style: TextStyle(color: Colors.white, fontSize: 18),
-                          ),
-                        ),
-                      ),
+                      initialIndex: 0,
+                      // 指でひっぱってめくるスピードとレスポンスを向上
+                      duration: const Duration(milliseconds: 300),
+                      cutoff: 0.2,
                       children: List.generate(
                         _pageCount,
                         (index) => SinglePdfPageWidget(
@@ -334,7 +329,7 @@ class _PageFlipPDFViewerScreenState extends State<PageFlipPDFViewerScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
-                          '${_currentPageIndex + 1} / $_pageCount ページ',
+                          '1 / $_pageCount ページ',
                           style: const TextStyle(color: Colors.white),
                         ),
                       ),
@@ -377,6 +372,8 @@ class _SinglePdfPageWidgetState extends State<SinglePdfPageWidget> {
   Future<void> _renderPage() async {
     try {
       final page = await widget.document.getPage(widget.pageNumber);
+      
+      // 画面解像度に合わせて正しく取得
       final screenWidth = MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio;
       final scale = screenWidth / page.width;
 
@@ -401,7 +398,7 @@ class _SinglePdfPageWidgetState extends State<SinglePdfPageWidget> {
     if (_imageBytes == null) {
       return Container(
         color: Colors.black,
-        child: const Center(child: CircularProgressIndicator(color: Colors.brown)),
+        child: const Center(child: CircularProgressIndicator(color: Colors.white)),
       );
     }
     return Container(
