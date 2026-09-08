@@ -2,11 +2,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdfx/pdfx.dart';
-import 'package:page_flip/page_flip.dart';
 
 void main() {
-  // 起動時のプラグイン初期化エラー（クラッシュ）を防止
-  WidgetsBinding platformBinding = WidgetsFlutterBinding.ensureInitialized();
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const MyApp());
 }
 
@@ -143,37 +141,19 @@ class PdfViewerScreen extends StatefulWidget {
 }
 
 class _PdfViewerScreenState extends State<PdfViewerScreen> {
-  final GlobalKey<PageFlipWidgetState> _controller = GlobalKey<PageFlipWidgetState>();
-  PdfDocument? _pdfDocument;
-  int _pageCount = 0;
-  bool _isLoading = true;
-  String? _errorMessage;
+  late PdfController _pdfController;
 
   @override
   void initState() {
     super.initState();
-    _loadPdf();
-  }
-
-  Future<void> _loadPdf() async {
-    try {
-      final doc = await PdfDocument.openFile(widget.pdfFile.path);
-      setState(() {
-        _pdfDocument = doc;
-        _pageCount = doc.pagesCount;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'PDFの読み込みに失敗しました: $e';
-        _isLoading = false;
-      });
-    }
+    _pdfController = PdfController(
+      document: PdfDocument.openFile(widget.pdfFile.path),
+    );
   }
 
   @override
   void dispose() {
-    _pdfDocument?.close();
+    _pdfController.dispose();
     super.dispose();
   }
 
@@ -189,109 +169,8 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
           style: const TextStyle(fontSize: 16),
         ),
       ),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: Colors.white),
-            )
-          : _errorMessage != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Text(
-                      _errorMessage!,
-                      style: const TextStyle(color: Colors.redAccent),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                )
-              : Stack(
-                  children: [
-                    PageFlipWidget(
-                      key: _controller,
-                      backgroundColor: Colors.black,
-                      initialIndex: 0,
-                      duration: const Duration(milliseconds: 300),
-                      children: List.generate(
-                        _pageCount,
-                        (index) => SinglePdfPageWidget(
-                          document: _pdfDocument!,
-                          pageNumber: index + 1,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-    );
-  }
-}
-
-class SinglePdfPageWidget extends StatefulWidget {
-  final PdfDocument document;
-  final int pageNumber;
-
-  const SinglePdfPageWidget({
-    super.key,
-    required this.document,
-    required this.pageNumber,
-  });
-
-  @override
-  State<SinglePdfPageWidget> createState() => _SinglePdfPageWidgetState();
-}
-
-class _SinglePdfPageWidgetState extends State<SinglePdfPageWidget> {
-  PdfPageImage? _pageImage;
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _renderPage();
-  }
-
-  Future<void> _renderPage() async {
-    try {
-      final page = await widget.document.getPage(widget.pageNumber);
-      final pageImage = await page.render(
-        width: page.width * 2,
-        height: page.height * 2,
-        format: PdfPageImageFormat.jpeg,
-      );
-      await page.close();
-
-      if (mounted) {
-        setState(() {
-          _pageImage = pageImage;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: Colors.white),
-      );
-    }
-
-    if (_pageImage == null) {
-      return const Center(
-        child: Icon(Icons.error_outline, color: Colors.white54, size: 48),
-      );
-    }
-
-    return Center(
-      child: Image.memory(
-        _pageImage!.bytes,
-        fit: BoxFit.contain,
+      body: PdfView(
+        controller: _pdfController,
       ),
     );
   }
