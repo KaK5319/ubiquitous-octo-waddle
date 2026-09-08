@@ -1,38 +1,24 @@
-plugins {
-    id("com.android.application")
-    id("kotlin-android")
-    id("dev.flutter.flutter-gradle-plugin")
-}
+name: sidebooks_clone
+description: "A SideBooks clone Flutter application."
+publish_to: 'none'
 
-android {
-    namespace = "com.example.ubiquitous_octo_waddle"
-    compileSdk = flutter.compileSdkVersion
-    ndkVersion = "28.2.13676358"
+version: 1.0.0+1
 
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
-    }
+environment:
+  sdk: '>=3.0.0 <4.0.0'
 
-    kotlinOptions {
-        jvmTarget = "1.8"
-    }
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+  file_picker: ^8.0.0
+  pdfx: ^2.6.0
+  page_flip: ^0.2.1
 
-    defaultConfig {
-        applicationId = "com.example.ubiquitous_octo_waddle"
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
-    }
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
 
-    buildTypes {
-        release {
-            signingConfig = signingConfigs.getByName("debug")
-        }
-    }
-}
-
-flutter {
-    source = "../.."
-}
+flutter:
+  uses-material-design: true
