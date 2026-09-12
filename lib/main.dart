@@ -1,7 +1,7 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdfx/pdfx.dart';
-import 'package:page_flip_builder/page_flip_builder.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -76,12 +76,14 @@ class PdfViewerScreen extends StatefulWidget {
 
 class _PdfViewerScreenState extends State<PdfViewerScreen> {
   late PdfDocument _pdfDocument;
+  late PageController _pageController;
   bool _isLoading = true;
   int _pageCount = 0;
 
   @override
   void initState() {
     super.initState();
+    _pageController = PageController();
     _loadPdf();
   }
 
@@ -95,6 +97,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
 
   @override
   void dispose() {
+    _pageController.dispose();
     _pdfDocument.close();
     super.dispose();
   }
@@ -108,14 +111,35 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : PageFlipBuilder(
-              amount: _pageCount,
-              builder: (context, index) {
-                // 漫画（右開き）用にページ順を逆算
-                final pageNumber = _pageCount - index;
-                return PdfPageImageWidget(
-                  pdfDocument: _pdfDocument,
-                  pageNumber: pageNumber,
+          : PageView.builder(
+              controller: _pageController,
+              itemCount: _pageCount,
+              reverse: true, // 右開き（漫画）
+              itemBuilder: (context, index) {
+                return AnimatedBuilder(
+                  animation: _pageController,
+                  builder: (context, child) {
+                    double pageOffset = 0;
+                    if (_pageController.position.haveDimensions) {
+                      pageOffset = (_pageController.page ?? 0) - index;
+                    }
+
+                    // ページがめくられる際のアニメーション回転処理
+                    final angle = pageOffset * pi / 4;
+                    final transform = Matrix4.identity()
+                      ..setEntry(3, 2, 0.001)
+                      ..rotateY(angle);
+
+                    return Transform(
+                      transform: transform,
+                      alignment: pageOffset > 0 ? Alignment.centerRight : Alignment.centerLeft,
+                      child: child,
+                    );
+                  },
+                  child: PdfPageImageWidget(
+                    pdfDocument: _pdfDocument,
+                    pageNumber: index + 1,
+                  ),
                 );
               },
             ),
@@ -123,7 +147,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   }
 }
 
-// 1ページ分の画像レンダリング用ウィジェット
 class PdfPageImageWidget extends StatelessWidget {
   final PdfDocument pdfDocument;
   final int pageNumber;
