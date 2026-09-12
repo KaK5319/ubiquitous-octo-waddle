@@ -93,7 +93,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     });
   }
 
-  @override;
+  @override
   void dispose() {
     _pdfDocument.close();
     super.dispose();
