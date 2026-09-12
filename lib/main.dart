@@ -114,7 +114,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
           : PageView.builder(
               controller: _pageController,
               itemCount: _pageCount,
-              reverse: true, // 右開き（漫画）
               itemBuilder: (context, index) {
                 return AnimatedBuilder(
                   animation: _pageController,
@@ -124,16 +123,29 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                       pageOffset = (_pageController.page ?? 0) - index;
                     }
 
-                    // ページがめくられる際のアニメーション回転処理
-                    final angle = pageOffset * pi / 4;
+                    // ページめくりの3D湾曲＋影効果
+                    final angle = pageOffset * pi / 3.5;
                     final transform = Matrix4.identity()
-                      ..setEntry(3, 2, 0.001)
-                      ..rotateY(angle);
+                      ..setEntry(3, 2, 0.0012)
+                      ..rotateY(-angle);
 
                     return Transform(
                       transform: transform,
-                      alignment: pageOffset > 0 ? Alignment.centerRight : Alignment.centerLeft,
-                      child: child,
+                      alignment: pageOffset > 0 ? Alignment.centerLeft : Alignment.centerRight,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          boxShadow: pageOffset.abs() > 0.01
+                              ? [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.4),
+                                    blurRadius: 15,
+                                    spreadRadius: 2,
+                                  )
+                                ]
+                              : [],
+                        ),
+                        child: child,
+                      ),
                     );
                   },
                   child: PdfPageImageWidget(
