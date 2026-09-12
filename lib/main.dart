@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdfx/pdfx.dart';
+import 'package:page_flip_builder/page_flip_builder.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,8 +33,6 @@ class BookshelfScreen extends StatefulWidget {
 }
 
 class _BookshelfScreenState extends State<BookshelfScreen> {
-  String? _selectedFilePath;
-
   Future<void> _pickPDF() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -41,14 +40,11 @@ class _BookshelfScreenState extends State<BookshelfScreen> {
     );
 
     if (result != null && result.files.single.path != null) {
-      setState(() {
-        _selectedFilePath = result.files.single.path;
-      });
       if (mounted) {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => PdfViewerScreen(filePath: _selectedFilePath!),
+            builder: (context) => PdfViewerScreen(filePath: result.files.single.path!),
           ),
         );
       }
@@ -79,33 +75,89 @@ class PdfViewerScreen extends StatefulWidget {
 }
 
 class _PdfViewerScreenState extends State<PdfViewerScreen> {
-  late PdfController _pdfController;
+  late PdfDocument _pdfDocument;
+  bool _isLoading = true;
+  int _pageCount = 0;
 
   @override
   void initState() {
     super.initState();
-    _pdfController = PdfController(
-      document: PdfDocument.openFile(widget.filePath),
-    );
+    _loadPdf();
   }
 
-  @override
+  Future<void> _loadPdf() async {
+    _pdfDocument = await PdfDocument.openFile(widget.filePath);
+    setState(() {
+      _pageCount = _pdfDocument.pagesCount;
+      _isLoading = false;
+    });
+  }
+
+  @override;
   void dispose() {
-    _pdfController.dispose();
+    _pdfDocument.close();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.black,
       appBar: AppBar(
         title: Text(widget.filePath.split('/').last),
       ),
-      body: PdfView(
-        controller: _pdfController,
-        scrollDirection: Axis.horizontal, // 横送りに変更
-        reverse: true,                    // 右開き（漫画読み）に設定
-      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : PageFlipBuilder(
+              amount: _pageCount,
+              builder: (context, index) {
+                // 漫画（右開き）用にページ順を逆算
+                final pageNumber = _pageCount - index;
+                return PdfPageImageWidget(
+                  pdfDocument: _pdfDocument,
+                  pageNumber: pageNumber,
+                );
+              },
+            ),
     );
+  }
+}
+
+// 1ページ分の画像レンダリング用ウィジェット
+class PdfPageImageWidget extends StatelessWidget {
+  final PdfDocument pdfDocument;
+  final int pageNumber;
+
+  const PdfPageImageWidget({
+    super.key,
+    required this.pdfDocument,
+    required this.pageNumber,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<PdfPageImage?>(
+      future: _renderPage(pageNumber),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.done && snapshot.hasData) {
+          return Image.memory(
+            snapshot.data!.bytes,
+            fit: BoxFit.contain,
+          );
+        }
+        return const Center(child: CircularProgressIndicator());
+      },
+    );
+  }
+
+  Future<PdfPageImage?> _renderPage(int pageNum) async {
+    final page = await pdfDocument.getPage(pageNum);
+    final pageImage = await page.render(
+      width: page.width * 2,
+      height: page.height * 2,
+      format: PdfPageImageFormat.jpeg,
+    );
+    await page.close();
+    return pageImage;
   }
 }
