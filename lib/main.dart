@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdfx/pdfx.dart';
@@ -90,13 +89,21 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
 
   Future<void> _loadPdf() async {
     _pdfDocument = await PdfDocument.openFile(widget.filePath);
-    setState(() {
-      _pageCount = _pdfDocument.pagesCount;
-      _isLoading = false;
-    });
+    _pageCount = _pdfDocument.pagesCount;
+
+    // 最初の数ページを事前にレンダリングして準備完了にする
+    for (int i = 1; i <= (_pageCount < 3 ? _pageCount : 3); i++) {
+      await _renderPage(i);
+    }
+
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
-  Future<ImageProvider> _getOrRenderPage(int pageNumber) async {
+  Future<ImageProvider> _renderPage(int pageNumber) async {
     if (_imageCache.containsKey(pageNumber)) {
       return _imageCache[pageNumber]!;
     }
@@ -133,22 +140,61 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
               isRightSwipe: true, // 右開き（和書・漫画用）
               children: List.generate(_pageCount, (index) {
                 final pageNumber = index + 1;
-                return FutureBuilder<ImageProvider>(
-                  future: _getOrRenderPage(pageNumber),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState != ConnectionState.done || !snapshot.hasData) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    return Center(
-                      child: Image(
-                        image: snapshot.data!,
-                        fit: BoxFit.contain,
-                      ),
-                    );
-                  },
+                return PdfPageWidget(
+                  pageNumber: pageNumber,
+                  onLoad: () => _renderPage(pageNumber),
                 );
               }),
             ),
+    );
+  }
+}
+
+class PdfPageWidget extends StatefulWidget {
+  final int pageNumber;
+  final Future<ImageProvider> Function() onLoad;
+
+  const PdfPageWidget({
+    super.key,
+    required this.pageNumber,
+    required this.onLoad,
+  });
+
+  @override
+  State<PdfPageWidget> createState() => _PdfPageWidgetState();
+}
+
+class _PdfPageWidgetState extends State<PdfPageWidget> {
+  ImageProvider? _imageProvider;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadImage();
+  }
+
+  Future<void> _loadImage() async {
+    final img = await widget.onLoad();
+    if (mounted) {
+      setState(() {
+        _imageProvider = img;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_imageProvider == null) {
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.white),
+      );
+    }
+
+    return Center(
+      child: Image(
+        image: _imageProvider!,
+        fit: BoxFit.contain,
+      ),
     );
   }
 }
