@@ -123,28 +123,40 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                       pageOffset = (_pageController.page ?? 0) - index;
                     }
 
-                    // ページめくりの3D湾曲＋影効果
-                    final angle = pageOffset * pi / 3.5;
+                    // ページめくりの3D傾き（遠近感強化）
+                    final angle = pageOffset * pi / 3.0;
                     final transform = Matrix4.identity()
-                      ..setEntry(3, 2, 0.0012)
+                      ..setEntry(3, 2, 0.0018)
                       ..rotateY(-angle);
+
+                    // めくっている度合いに応じたグラデーションの濃さ
+                    final shadowOpacity = (pageOffset.abs()).clamp(0.0, 0.6);
 
                     return Transform(
                       transform: transform,
                       alignment: pageOffset > 0 ? Alignment.centerLeft : Alignment.centerRight,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          boxShadow: pageOffset.abs() > 0.01
-                              ? [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.4),
-                                    blurRadius: 15,
-                                    spreadRadius: 2,
-                                  )
-                                ]
-                              : [],
-                        ),
-                        child: child,
+                      child: Stack(
+                        children: [
+                          child!,
+                          // ★ ドレープ感（湾曲した影）を再現するインナーグラデーション
+                          if (pageOffset.abs() > 0.001)
+                            Positioned.fill(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: pageOffset > 0 ? Alignment.centerRight : Alignment.centerLeft,
+                                    end: pageOffset > 0 ? Alignment.centerLeft : Alignment.centerRight,
+                                    colors: [
+                                      Colors.black.withOpacity(shadowOpacity),
+                                      Colors.transparent,
+                                      Colors.black.withOpacity(shadowOpacity * 0.5),
+                                    ],
+                                    stops: const [0.0, 0.5, 1.0],
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     );
                   },
