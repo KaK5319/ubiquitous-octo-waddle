@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdfx/pdfx.dart';
-import 'package:page_turn/page_turn.dart';
+import 'package:turn_page/turn_page.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -76,7 +76,7 @@ class PdfViewerScreen extends StatefulWidget {
 
 class _PdfViewerScreenState extends State<PdfViewerScreen> {
   late PdfDocument _pdfDocument;
-  final GlobalKey<PageTurnState> _controller = GlobalKey<PageTurnState>();
+  final TurnPageController _controller = TurnPageController();
   bool _isLoading = true;
   int _pageCount = 0;
   final Map<int, ImageProvider> _imageCache = {};
@@ -91,7 +91,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     _pdfDocument = await PdfDocument.openFile(widget.filePath);
     _pageCount = _pdfDocument.pagesCount;
 
-    // 先頭数ページをあらかじめキャッシュして瞬時に表示できるようにする
     for (int i = 1; i <= (_pageCount < 3 ? _pageCount : 3); i++) {
       await _renderPage(i);
     }
@@ -134,16 +133,16 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : PageTurn(
-              key: _controller,
-              backgroundColor: Colors.black,
-              children: List.generate(_pageCount, (index) {
+          : TurnPageView.builder(
+              controller: _controller,
+              itemCount: _pageCount,
+              itemBuilder: (context, index) {
                 final pageNumber = index + 1;
                 return PdfPageWidget(
                   pageNumber: pageNumber,
                   onLoad: () => _renderPage(pageNumber),
                 );
-              }),
+              },
             ),
     );
   }
