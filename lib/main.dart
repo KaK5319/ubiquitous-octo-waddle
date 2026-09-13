@@ -123,41 +123,65 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                       pageOffset = (_pageController.page ?? 0) - index;
                     }
 
-                    // ページめくりの3D傾き（遠近感強化）
-                    final angle = pageOffset * pi / 3.0;
-                    final transform = Matrix4.identity()
-                      ..setEntry(3, 2, 0.0018)
-                      ..rotateY(-angle);
+                    // ページがめくられていない時は通常描画
+                    if (pageOffset.abs() < 0.001) {
+                      return child!;
+                    }
 
-                    // めくっている度合いに応じたグラデーションの濃さ
-                    final shadowOpacity = (pageOffset.abs()).clamp(0.0, 0.6);
+                    // ページを10分割して曲面（湾曲ドレープ）を構成
+                    const int slices = 10;
+                    final isFlippingForward = pageOffset > 0;
+                    final progress = pageOffset.abs().clamp(0.0, 1.0);
 
-                    return Transform(
-                      transform: transform,
-                      alignment: pageOffset > 0 ? Alignment.centerLeft : Alignment.centerRight,
-                      child: Stack(
-                        children: [
-                          child!,
-                          // ★ ドレープ感（湾曲した影）を再現するインナーグラデーション
-                          if (pageOffset.abs() > 0.001)
-                            Positioned.fill(
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: pageOffset > 0 ? Alignment.centerRight : Alignment.centerLeft,
-                                    end: pageOffset > 0 ? Alignment.centerLeft : Alignment.centerRight,
-                                    colors: [
-                                      Colors.black.withOpacity(shadowOpacity),
-                                      Colors.transparent,
-                                      Colors.black.withOpacity(shadowOpacity * 0.5),
-                                    ],
-                                    stops: const [0.0, 0.5, 1.0],
+                    return LayoutBuilder(
+                      builder: (context, constraints) {
+                        final sliceWidth = constraints.maxWidth / slices;
+
+                        return Row(
+                          children: List.generate(slices, (i) {
+                            // 端に向かって曲線を描く計算
+                            final sliceIndex = isFlippingForward ? i : (slices - 1 - i);
+                            final sliceProgress = (sliceIndex / slices) * progress;
+                            
+                            // 曲がり具合と湾曲時の影
+                            final sliceAngle = sin(sliceProgress * pi / 2) * (pi / 4);
+                            final shadowOpacity = sin(sliceProgress * pi) * 0.45;
+
+                            final transform = Matrix4.identity()
+                              ..setEntry(3, 2, 0.0015)
+                              ..rotateY(isFlippingForward ? -sliceAngle : sliceAngle);
+
+                            return ClipRect(
+                              child: Align(
+                                alignment: Alignment(
+                                  -1.0 + (i / (slices - 1)) * 2.0,
+                                  0.0,
+                                ),
+                                widthFactor: 1 / slices,
+                                child: SizedBox(
+                                  width: constraints.maxWidth,
+                                  height: constraints.maxHeight,
+                                  child: Transform(
+                                    transform: transform,
+                                    alignment: isFlippingForward
+                                        ? Alignment.centerLeft
+                                        : Alignment.centerRight,
+                                    child: Stack(
+                                      children: [
+                                        child!,
+                                        // 湾曲部分にリアルに落とし込むグラデーション影
+                                        Container(
+                                          color: Colors.black.withOpacity(shadowOpacity),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                        ],
-                      ),
+                            );
+                          }),
+                        );
+                      },
                     );
                   },
                   child: PdfPageImageWidget(
