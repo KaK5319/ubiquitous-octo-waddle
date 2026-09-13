@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdfx/pdfx.dart';
+import 'package:page_flip/page_flip.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -76,7 +77,7 @@ class PdfViewerScreen extends StatefulWidget {
 
 class _PdfViewerScreenState extends State<PdfViewerScreen> {
   late PdfDocument _pdfDocument;
-  late PageController _pageController;
+  final GlobalKey<PageFlipWidgetState> _controller = GlobalKey<PageFlipWidgetState>();
   bool _isLoading = true;
   int _pageCount = 0;
   final Map<int, ImageProvider> _imageCache = {};
@@ -84,7 +85,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   @override
   void initState() {
     super.initState();
-    _pageController = PageController();
     _loadPdf();
   }
 
@@ -114,7 +114,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
 
   @override
   void dispose() {
-    _pageController.dispose();
     _pdfDocument.close();
     super.dispose();
   }
@@ -128,99 +127,27 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : PageView.builder(
-              controller: _pageController,
-              itemCount: _pageCount,
-              itemBuilder: (context, index) {
+          : PageFlipWidget(
+              key: _controller,
+              backgroundColor: Colors.black,
+              isRightSwipe: true, // 右開き（和書・漫画用）
+              children: List.generate(_pageCount, (index) {
                 final pageNumber = index + 1;
-
                 return FutureBuilder<ImageProvider>(
                   future: _getOrRenderPage(pageNumber),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState != ConnectionState.done || !snapshot.hasData) {
                       return const Center(child: CircularProgressIndicator());
                     }
-
-                    final pageImageProvider = snapshot.data!;
-                    final pageWidget = Image(
-                      image: pageImageProvider,
-                      fit: BoxFit.contain,
-                    );
-
-                    return AnimatedBuilder(
-                      animation: _pageController,
-                      builder: (context, child) {
-                        double pageOffset = 0;
-                        if (_pageController.position.haveDimensions) {
-                          pageOffset = (_pageController.page ?? 0) - index;
-                        }
-
-                        if (pageOffset.abs() < 0.001) {
-                          return pageWidget;
-                        }
-
-                        // ページを10分割して曲面構成
-                        const int slices = 10;
-                        final isFlippingForward = pageOffset > 0;
-                        final progress = pageOffset.abs().clamp(0.0, 1.0);
-
-                        return LayoutBuilder(
-                          builder: (context, constraints) {
-                            final sliceWidth = constraints.maxWidth / slices;
-
-                            return Stack(
-                              children: List.generate(slices, (i) {
-                                final ratio = isFlippingForward
-                                    ? (slices - 1 - i) / (slices - 1)
-                                    : i / (slices - 1);
-
-                                final bendAmount = pow(ratio, 1.5) * progress;
-                                final angle = bendAmount * (pi / 2.5);
-                                final shadowOpacity = sin(bendAmount * pi) * 0.5;
-
-                                final transform = Matrix4.identity()
-                                  ..setEntry(3, 2, 0.002)
-                                  ..rotateY(isFlippingForward ? -angle : angle);
-
-                                return Positioned(
-                                  left: i * sliceWidth,
-                                  top: 0,
-                                  width: sliceWidth,
-                                  height: constraints.maxHeight,
-                                  child: Transform(
-                                    transform: transform,
-                                    alignment: isFlippingForward
-                                        ? Alignment.centerLeft
-                                        : Alignment.centerRight,
-                                    child: Stack(
-                                      children: [
-                                        OverflowBox(
-                                          alignment: Alignment(
-                                            -1.0 + (i / (slices - 1)) * 2.0,
-                                            0.0,
-                                          ),
-                                          minWidth: constraints.maxWidth,
-                                          maxWidth: constraints.maxWidth,
-                                          minHeight: constraints.maxHeight,
-                                          maxHeight: constraints.maxHeight,
-                                          child: pageWidget,
-                                        ),
-                                        Container(
-                                          color: Colors.black.withOpacity(shadowOpacity),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              }),
-                            );
-                          },
-                        );
-                      },
+                    return Center(
+                      child: Image(
+                        image: snapshot.data!,
+                        fit: BoxFit.contain,
+                      ),
                     );
                   },
                 );
-              },
+              }),
             ),
     );
   }
