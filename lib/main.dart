@@ -147,24 +147,36 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
               itemCount: _pageCount,
               itemBuilder: (context, index) {
                 final pageNumber = index + 1;
-                final delta = index - _currentPage;
-                final rotation = (delta * pi / 3).clamp(-pi / 3, pi / 3);
+                final position = index - _currentPage;
 
+                // ページの重なりと影の演出
                 return Transform(
                   transform: Matrix4.identity()
-                    ..setEntry(3, 2, 0.001) // 遠近感
-                    ..rotateY(rotation),
-                  alignment: delta > 0 ? Alignment.centerLeft : Alignment.centerRight,
+                    ..translate(position < 0 ? position * 30.0 : 0.0), // 下のページを微妙に遅らせる
                   child: Stack(
                     children: [
                       PdfPageWidget(
                         pageNumber: pageNumber,
                         onLoad: () => _renderPage(pageNumber),
                       ),
-                      // 影のオーバーレイ表現
-                      Container(
-                        color: Colors.black.withOpacity((delta.abs()).clamp(0.0, 0.6)),
-                      ),
+                      // めくっている最中のページの上に落ちるリアルなドロップシャドウ
+                      if (position > 0)
+                        Positioned(
+                          left: 0,
+                          top: 0,
+                          bottom: 0,
+                          child: Container(
+                            width: 30,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.black.withOpacity(0.5 * (1 - position.clamp(0.0, 1.0))),
+                                  Colors.transparent,
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 );
