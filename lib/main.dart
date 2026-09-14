@@ -1,4 +1,4 @@
-import 'dart:math';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdfx/pdfx.dart';
@@ -76,31 +76,30 @@ class PdfViewerScreen extends StatefulWidget {
 
 class _PdfViewerScreenState extends State<PdfViewerScreen> {
   late PdfDocument _pdfDocument;
-  late PageController _pageController;
+  ui.FragmentShader? _shader;
   bool _isLoading = true;
   int _pageCount = 0;
-  double _currentPage = 0.0;
-  final Map<int, ImageProvider> _imageCache = {};
+  int _currentIndex = 0;
+  double _dragProgress = 0.0;
+  
+  final Map<int, ui.Image> _imageMap = {};
 
   @override
   void initState() {
     super.initState();
-    _pageController = PageController();
-    _pageController.addListener(() {
-      setState(() {
-        _currentPage = _pageController.page ?? 0.0;
-      });
-    });
-    _loadPdf();
+    _initShaderAndPdf();
   }
 
-  Future<void> _loadPdf() async {
+  Future<void> _initShaderAndPdf() async {
+    final program = await ui.FragmentProgram.fromAsset('assets/page_curl.frag');
+    _shader = program.fragmentShader();
+
     _pdfDocument = await PdfDocument.openFile(widget.filePath);
     _pageCount = _pdfDocument.pagesCount;
 
-    for (int i = 1; i <= (_pageCount < 3 ? _pageCount : 3); i++) {
-      await _renderPage(i);
-    }
+    // 最初の2ページをレンダリング
+    await _renderPageUi(1);
+    if (_pageCount > 1) await _renderPageUi(2);
 
     if (mounted) {
       setState(() {
@@ -109,9 +108,9 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     }
   }
 
-  Future<ImageProvider> _renderPage(int pageNumber) async {
-    if (_imageCache.containsKey(pageNumber)) {
-      return _imageCache[pageNumber]!;
+  Future<ui.Image> _renderPageUi(int pageNumber) async {
+    if (_imageMap.containsKey(pageNumber)) {
+      return _imageMap[pageNumber]!;
     }
     final page = await _pdfDocument.getPage(pageNumber);
     final pageImage = await page.render(
@@ -120,117 +119,106 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       format: PdfPageImageFormat.jpeg,
     );
     await page.close();
-    final imageProvider = MemoryImage(pageImage!.bytes);
-    _imageCache[pageNumber] = imageProvider;
-    return imageProvider;
+
+    final codec = await ui.instantiateImageCodec(pageImage!.bytes);
+    final frame = await codec.getNextFrame();
+    _imageMap[pageNumber] = frame.image;
+    return frame.image;
+  }
+
+  void _onHorizontalDragUpdate(DragUpdateDetails details, double screenWidth) {
+    setState(() {
+      // 右から左（右開き）への指の移動量に応じて進捗度を更新
+      _dragProgress -= details.primaryDelta! / screenWidth;
+      _dragProgress = _dragProgress.clamp(0.0, 1.0);
+    });
+
+    // 次のページを事前に準備
+    if (_currentIndex + 2 <= _pageCount) {
+      _renderPageUi(_currentIndex + 2);
+    }
+  }
+
+  void _onHorizontalDragEnd(DragEndDetails details) {
+    if (_dragProgress > 0.4 && _currentIndex + 1 < _pageCount) {
+      // 一定以上ドラッグしたらページをめくる
+      setState(() {
+        _currentIndex++;
+        _dragProgress = 0.0;
+      });
+    } else {
+      // 途中で離したら元の位置に戻る
+      setState(() {
+        _dragProgress = 0.0;
+      });
+    }
   }
 
   @override
   void dispose() {
-    _pageController.dispose();
     _pdfDocument.close();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
         title: Text(widget.filePath.split('/').last),
       ),
-      body: _isLoading
+      body: _isLoading || _shader == null
           ? const Center(child: CircularProgressIndicator())
-          : PageView.builder(
-              controller: _pageController,
-              reverse: true, // 右開き（和書・漫画用）
-              itemCount: _pageCount,
-              itemBuilder: (context, index) {
-                final pageNumber = index + 1;
-                final position = index - _currentPage;
-
-                // ページの重なりと影の演出
-                return Transform(
-                  transform: Matrix4.identity()
-                    ..translate(position < 0 ? position * 30.0 : 0.0), // 下のページを微妙に遅らせる
-                  child: Stack(
-                    children: [
-                      PdfPageWidget(
-                        pageNumber: pageNumber,
-                        onLoad: () => _renderPage(pageNumber),
-                      ),
-                      // めくっている最中のページの上に落ちるリアルなドロップシャドウ
-                      if (position > 0)
-                        Positioned(
-                          left: 0,
-                          top: 0,
-                          bottom: 0,
-                          child: Container(
-                            width: 30,
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  Colors.black.withOpacity(0.5 * (1 - position.clamp(0.0, 1.0))),
-                                  Colors.transparent,
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                );
-              },
+          : GestureDetector(
+              onHorizontalDragUpdate: (details) => _onHorizontalDragUpdate(details, size.width),
+              onHorizontalDragEnd: _onHorizontalDragEnd,
+              child: CustomPaint(
+                size: size,
+                painter: PageCurlPainter(
+                  shader: _shader!,
+                  currentImage: _imageMap[_currentIndex + 1],
+                  nextImage: _imageMap[_currentIndex + 2] ?? _imageMap[_currentIndex + 1],
+                  progress: _dragProgress,
+                ),
+              ),
             ),
     );
   }
 }
 
-class PdfPageWidget extends StatefulWidget {
-  final int pageNumber;
-  final Future<ImageProvider> Function() onLoad;
+class PageCurlPainter extends CustomPainter {
+  final ui.FragmentShader shader;
+  final ui.Image? currentImage;
+  final ui.Image? nextImage;
+  final double progress;
 
-  const PdfPageWidget({
-    super.key,
-    required this.pageNumber,
-    required this.onLoad,
+  PageCurlPainter({
+    required this.shader,
+    required this.currentImage,
+    required this.nextImage,
+    required this.progress,
   });
 
   @override
-  State<PdfPageWidget> createState() => _PdfPageWidgetState();
-}
+  void paint(Canvas canvas, Size size) {
+    if (currentImage == null) return;
 
-class _PdfPageWidgetState extends State<PdfPageWidget> {
-  ImageProvider? _imageProvider;
+    shader.setFloat(0, size.width);
+    shader.setFloat(1, size.height);
+    shader.setFloat(2, progress);
+    shader.setImageSampler(0, currentImage!);
+    shader.setImageSampler(1, nextImage ?? currentImage!);
 
-  @override
-  void initState() {
-    super.initState();
-    _loadImage();
-  }
-
-  Future<void> _loadImage() async {
-    final img = await widget.onLoad();
-    if (mounted) {
-      setState(() {
-        _imageProvider = img;
-      });
-    }
+    final paint = Paint()..shader = shader;
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), paint);
   }
 
   @override
-  Widget build(BuildContext context) {
-    if (_imageProvider == null) {
-      return const Center(
-        child: CircularProgressIndicator(color: Colors.white),
-      );
-    }
-
-    return Center(
-      child: Image(
-        image: _imageProvider!,
-        fit: BoxFit.contain,
-      ),
-    );
+  bool shouldRepaint(covariant PageCurlPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.currentImage != currentImage ||
+        oldDelegate.nextImage != nextImage;
   }
 }
