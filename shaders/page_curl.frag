@@ -11,22 +11,23 @@ void main() {
     vec2 st = FlutterFragCoord().xy / uSize;
     float progress = clamp(uPointer, 0.0, 1.0);
     
-    // めくるページの右端の位置（1.0 から 0.0 へ動く）
-    float curlPos = 1.0 - progress;
-    float shadowWidth = 0.1;
+    // スライドして左へ抜けていく「現在のページ」の右端位置（1.0 -> 0.0）
+    float edgePos = 1.0 - progress;
+    float shadowWidth = 0.12;
 
-    // めくっている最中のページ（現在のページ）がスライドして隠れる範囲
-    if (st.x < curlPos) {
-        // 上に載っている現在のページ
+    if (st.x < edgePos) {
+        // 【上層】左へスライド中の「現在のページ」
         vec4 color = texture(uTextureCurrent, st);
-        // めくり端の直前にうっすら陰影をつける
-        float shadow = smoothstep(curlPos - shadowWidth, curlPos, st.x) * 0.3;
+        
+        // ページの右端（めくり目）に近づくにつれて立体感の影を入れる
+        float shadow = smoothstep(edgePos - shadowWidth, edgePos, st.x) * 0.25;
         fragColor = vec4(color.rgb * (1.0 - shadow), color.a);
     } else {
-        // 下に敷かれている次のページ（めくった部分から露出する）
+        // 【下層】右側から露出して見えてくる「次のページ」
         vec4 color = texture(uTextureNext, st);
-        // 上のページが落とす影を計算
-        float shadow = (1.0 - smoothstep(curlPos, curlPos + shadowWidth, st.x)) * 0.4;
+        
+        // 上のページが落とす落ち影を計算
+        float shadow = (1.0 - smoothstep(edgePos, edgePos + shadowWidth, st.x)) * 0.4;
         fragColor = vec4(color.rgb * (1.0 - shadow), color.a);
     }
 }
