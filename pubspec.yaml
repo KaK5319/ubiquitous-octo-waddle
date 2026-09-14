@@ -21,3 +21,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  shaders:
+    - assets/page_curl.frag
