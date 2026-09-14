@@ -82,6 +82,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   int _currentIndex = 0;
   double _dragProgress = 0.0;
   
+  // 保持する画像マップ
   final Map<int, ui.Image> _imageMap = {};
 
   @override
@@ -97,8 +98,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     _pdfDocument = await PdfDocument.openFile(widget.filePath);
     _pageCount = _pdfDocument.pagesCount;
 
-    // 最初の2ページだけ読み込んで高速起動
-    await _preloadPages(_currentIndex);
+    await _manageCache(_currentIndex);
 
     if (mounted) {
       setState(() {
@@ -107,31 +107,41 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     }
   }
 
-  Future<void> _preloadPages(int index) async {
-    // 現在のページとその前後のみ準備
-    final pagesToLoad = [index + 1, index + 2, index + 3];
-    for (var p in pagesToLoad) {
+  // 前後のページのみロードし、不要になった古いページの画像メモリを即座に解放する
+  Future<void> _manageCache(int index) async {
+    final neededPages = {index + 1, index + 2, index + 3};
+
+    // 不要になったメモリの解放
+    final keysToRemove = _imageMap.keys.where((k) => !neededPages.contains(k)).toList();
+    for (var k in keysToRemove) {
+      _imageMap[k]?.dispose(); // GPUメモリを解放
+      _imageMap.remove(k);
+    }
+
+    // 必要なページの読み込み
+    for (var p in neededPages) {
       if (p >= 1 && p <= _pageCount && !_imageMap.containsKey(p)) {
-        await _renderPageUi(p);
+        final img = await _renderPageUi(p);
+        if (mounted) {
+          setState(() {
+            _imageMap[p] = img;
+          });
+        }
       }
     }
   }
 
   Future<ui.Image> _renderPageUi(int pageNumber) async {
-    if (_imageMap.containsKey(pageNumber)) {
-      return _imageMap[pageNumber]!;
-    }
     final page = await _pdfDocument.getPage(pageNumber);
     final pageImage = await page.render(
-      width: page.width * 1.5,
-      height: page.height * 1.5,
+      width: page.width * 1.2,
+      height: page.height * 1.2,
       format: PdfPageImageFormat.jpeg,
     );
     await page.close();
 
     final codec = await ui.instantiateImageCodec(pageImage!.bytes);
     final frame = await codec.getNextFrame();
-    _imageMap[pageNumber] = frame.image;
     return frame.image;
   }
 
@@ -140,9 +150,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       _dragProgress -= details.primaryDelta! / screenWidth;
       _dragProgress = _dragProgress.clamp(0.0, 1.0);
     });
-
-    // めくっている最中に裏で次ページを準備
-    _preloadPages(_currentIndex + 1);
   }
 
   void _onHorizontalDragEnd(DragEndDetails details) {
@@ -151,7 +158,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
         _currentIndex++;
         _dragProgress = 0.0;
       });
-      _preloadPages(_currentIndex);
+      _manageCache(_currentIndex);
     } else {
       setState(() {
         _dragProgress = 0.0;
@@ -161,6 +168,9 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
 
   @override
   void dispose() {
+    for (var img in _imageMap.values) {
+      img.dispose();
+    }
     _pdfDocument.close();
     super.dispose();
   }
@@ -168,13 +178,15 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
+    final currentImg = _imageMap[_currentIndex + 1];
+    final nextImg = _imageMap[_currentIndex + 2] ?? currentImg;
 
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
         title: Text('${_currentIndex + 1} / $_pageCount'),
       ),
-      body: _isLoading || _shader == null
+      body: _isLoading || _shader == null || currentImg == null
           ? const Center(
               child: CircularProgressIndicator(color: Colors.white),
             )
@@ -185,8 +197,8 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                 size: size,
                 painter: PageCurlPainter(
                   shader: _shader!,
-                  currentImage: _imageMap[_currentIndex + 1],
-                  nextImage: _imageMap[_currentIndex + 2] ?? _imageMap[_currentIndex + 1],
+                  currentImage: currentImg,
+                  nextImage: nextImg,
                   progress: _dragProgress,
                 ),
               ),
@@ -197,8 +209,8 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
 
 class PageCurlPainter extends CustomPainter {
   final ui.FragmentShader shader;
-  final ui.Image? currentImage;
-  final ui.Image? nextImage;
+  final ui.Image currentImage;
+  final ui.Image nextImage;
   final double progress;
 
   PageCurlPainter({
@@ -210,13 +222,11 @@ class PageCurlPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (currentImage == null) return;
-
     shader.setFloat(0, size.width);
     shader.setFloat(1, size.height);
     shader.setFloat(2, progress);
-    shader.setImageSampler(0, currentImage!);
-    shader.setImageSampler(1, nextImage ?? currentImage!);
+    shader.setImageSampler(0, currentImage);
+    shader.setImageSampler(1, nextImage);
 
     final paint = Paint()..shader = shader;
     canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), paint);
