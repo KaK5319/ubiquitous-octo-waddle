@@ -97,15 +97,23 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     _pdfDocument = await PdfDocument.openFile(widget.filePath);
     _pageCount = _pdfDocument.pagesCount;
 
-    // 最初に全ページ分をレンダリング＆GPUキャッシュして引っかかりを防止
-    for (int i = 1; i <= _pageCount; i++) {
-      await _renderPageUi(i);
-    }
+    // 最初の2ページだけ読み込んで高速起動
+    await _preloadPages(_currentIndex);
 
     if (mounted) {
       setState(() {
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _preloadPages(int index) async {
+    // 現在のページとその前後のみ準備
+    final pagesToLoad = [index + 1, index + 2, index + 3];
+    for (var p in pagesToLoad) {
+      if (p >= 1 && p <= _pageCount && !_imageMap.containsKey(p)) {
+        await _renderPageUi(p);
+      }
     }
   }
 
@@ -115,8 +123,8 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     }
     final page = await _pdfDocument.getPage(pageNumber);
     final pageImage = await page.render(
-      width: page.width * 2,
-      height: page.height * 2,
+      width: page.width * 1.5,
+      height: page.height * 1.5,
       format: PdfPageImageFormat.jpeg,
     );
     await page.close();
@@ -132,6 +140,9 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       _dragProgress -= details.primaryDelta! / screenWidth;
       _dragProgress = _dragProgress.clamp(0.0, 1.0);
     });
+
+    // めくっている最中に裏で次ページを準備
+    _preloadPages(_currentIndex + 1);
   }
 
   void _onHorizontalDragEnd(DragEndDetails details) {
@@ -140,6 +151,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
         _currentIndex++;
         _dragProgress = 0.0;
       });
+      _preloadPages(_currentIndex);
     } else {
       setState(() {
         _dragProgress = 0.0;
@@ -164,14 +176,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       ),
       body: _isLoading || _shader == null
           ? const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(color: Colors.white),
-                  SizedBox(height: 16),
-                  Text('ページを処理中...', style: TextStyle(color: Colors.white)),
-                ],
-              ),
+              child: CircularProgressIndicator(color: Colors.white),
             )
           : GestureDetector(
               onHorizontalDragUpdate: (details) => _onHorizontalDragUpdate(details, size.width),
