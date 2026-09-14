@@ -91,7 +91,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   }
 
   Future<void> _initShaderAndPdf() async {
-    final program = await ui.FragmentProgram.fromAsset('assets/page_curl.frag');
+    final program = await ui.FragmentProgram.fromAsset('shaders/page_curl.frag');
     _shader = program.fragmentShader();
 
     _pdfDocument = await PdfDocument.openFile(widget.filePath);
@@ -128,12 +128,10 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
 
   void _onHorizontalDragUpdate(DragUpdateDetails details, double screenWidth) {
     setState(() {
-      // 右から左（右開き）への指の移動量に応じて進捗度を更新
       _dragProgress -= details.primaryDelta! / screenWidth;
       _dragProgress = _dragProgress.clamp(0.0, 1.0);
     });
 
-    // 次のページを事前に準備
     if (_currentIndex + 2 <= _pageCount) {
       _renderPageUi(_currentIndex + 2);
     }
@@ -141,13 +139,11 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
 
   void _onHorizontalDragEnd(DragEndDetails details) {
     if (_dragProgress > 0.4 && _currentIndex + 1 < _pageCount) {
-      // 一定以上ドラッグしたらページをめくる
       setState(() {
         _currentIndex++;
         _dragProgress = 0.0;
       });
     } else {
-      // 途中で離したら元の位置に戻る
       setState(() {
         _dragProgress = 0.0;
       });
