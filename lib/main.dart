@@ -40,14 +40,13 @@ class _BookshelfScreenState extends State<BookshelfScreen> {
     );
 
     if (result != null && result.files.single.path != null) {
-      if (mounted) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => PdfViewerScreen(filePath: result.files.single.path!),
-          ),
-        );
-      }
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => PdfViewerScreen(filePath: result.files.single.path!),
+        ),
+      );
     }
   }
 
@@ -81,8 +80,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   int _pageCount = 0;
   int _currentIndex = 0;
   double _dragProgress = 0.0;
-  
-  // 保持する画像マップ
+
   final Map<int, ui.Image> _imageMap = {};
 
   @override
@@ -107,27 +105,24 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     }
   }
 
-  // 前後のページのみロードし、不要になった古いページの画像メモリを即座に解放する
   Future<void> _manageCache(int index) async {
     final neededPages = {index + 1, index + 2, index + 3};
 
-    // 不要になったメモリの解放
     final keysToRemove = _imageMap.keys.where((k) => !neededPages.contains(k)).toList();
     for (var k in keysToRemove) {
-      _imageMap[k]?.dispose(); // GPUメモリを解放
+      _imageMap[k]?.dispose();
       _imageMap.remove(k);
     }
 
-    // 必要なページの読み込み
     for (var p in neededPages) {
       if (p >= 1 && p <= _pageCount && !_imageMap.containsKey(p)) {
         final img = await _renderPageUi(p);
-        if (mounted) {
-          setState(() {
-            _imageMap[p] = img;
-          });
-        }
+        _imageMap[p] = img;
       }
+    }
+
+    if (mounted) {
+      setState(() {});
     }
   }
 
@@ -210,7 +205,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
 class PageCurlPainter extends CustomPainter {
   final ui.FragmentShader shader;
   final ui.Image currentImage;
-  final ui.Image nextImage;
+  final ui.Image? nextImage;
   final double progress;
 
   PageCurlPainter({
@@ -226,7 +221,7 @@ class PageCurlPainter extends CustomPainter {
     shader.setFloat(1, size.height);
     shader.setFloat(2, progress);
     shader.setImageSampler(0, currentImage);
-    shader.setImageSampler(1, nextImage);
+    shader.setImageSampler(1, nextImage ?? currentImage);
 
     final paint = Paint()..shader = shader;
     canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), paint);
