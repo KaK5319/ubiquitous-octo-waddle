@@ -1,7 +1,7 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdfx/pdfx.dart';
-import 'package:curl_page_view/curl_page_view.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -76,13 +76,21 @@ class PdfViewerScreen extends StatefulWidget {
 
 class _PdfViewerScreenState extends State<PdfViewerScreen> {
   late PdfDocument _pdfDocument;
+  late PageController _pageController;
   bool _isLoading = true;
   int _pageCount = 0;
+  double _currentPage = 0.0;
   final Map<int, ImageProvider> _imageCache = {};
 
   @override
   void initState() {
     super.initState();
+    _pageController = PageController();
+    _pageController.addListener(() {
+      setState(() {
+        _currentPage = _pageController.page ?? 0.0;
+      });
+    });
     _loadPdf();
   }
 
@@ -119,6 +127,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
 
   @override
   void dispose() {
+    _pageController.dispose();
     _pdfDocument.close();
     super.dispose();
   }
@@ -132,14 +141,34 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : CurlPageView(
-              children: List.generate(_pageCount, (index) {
+          : PageView.builder(
+              controller: _pageController,
+              reverse: true, // 右開き（和書・漫画用）
+              itemCount: _pageCount,
+              itemBuilder: (context, index) {
                 final pageNumber = index + 1;
-                return PdfPageWidget(
-                  pageNumber: pageNumber,
-                  onLoad: () => _renderPage(pageNumber),
+                final delta = index - _currentPage;
+                final rotation = (delta * pi / 3).clamp(-pi / 3, pi / 3);
+
+                return Transform(
+                  transform: Matrix4.identity()
+                    ..setEntry(3, 2, 0.001) // 遠近感
+                    ..rotateY(rotation),
+                  alignment: delta > 0 ? Alignment.centerLeft : Alignment.centerRight,
+                  child: Stack(
+                    children: [
+                      PdfPageWidget(
+                        pageNumber: pageNumber,
+                        onLoad: () => _renderPage(pageNumber),
+                      ),
+                      // 影のオーバーレイ表現
+                      Container(
+                        color: Colors.black.withOpacity((delta.abs()).clamp(0.0, 0.6)),
+                      ),
+                    ],
+                  ),
                 );
-              }),
+              },
             ),
     );
   }
