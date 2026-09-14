@@ -97,9 +97,10 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     _pdfDocument = await PdfDocument.openFile(widget.filePath);
     _pageCount = _pdfDocument.pagesCount;
 
-    // 最初の2ページをレンダリング
-    await _renderPageUi(1);
-    if (_pageCount > 1) await _renderPageUi(2);
+    // 最初に全ページ分をレンダリング＆GPUキャッシュして引っかかりを防止
+    for (int i = 1; i <= _pageCount; i++) {
+      await _renderPageUi(i);
+    }
 
     if (mounted) {
       setState(() {
@@ -131,14 +132,10 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       _dragProgress -= details.primaryDelta! / screenWidth;
       _dragProgress = _dragProgress.clamp(0.0, 1.0);
     });
-
-    if (_currentIndex + 2 <= _pageCount) {
-      _renderPageUi(_currentIndex + 2);
-    }
   }
 
   void _onHorizontalDragEnd(DragEndDetails details) {
-    if (_dragProgress > 0.4 && _currentIndex + 1 < _pageCount) {
+    if (_dragProgress > 0.3 && _currentIndex + 1 < _pageCount) {
       setState(() {
         _currentIndex++;
         _dragProgress = 0.0;
@@ -163,10 +160,19 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text(widget.filePath.split('/').last),
+        title: Text('${_currentIndex + 1} / $_pageCount'),
       ),
       body: _isLoading || _shader == null
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(color: Colors.white),
+                  SizedBox(height: 16),
+                  Text('ページを処理中...', style: TextStyle(color: Colors.white)),
+                ],
+              ),
+            )
           : GestureDetector(
               onHorizontalDragUpdate: (details) => _onHorizontalDragUpdate(details, size.width),
               onHorizontalDragEnd: _onHorizontalDragEnd,
