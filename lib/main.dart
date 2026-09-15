@@ -124,6 +124,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
           : PageFlipWidget(
               key: _controller,
               backgroundColor: Colors.black,
+              isRightSwipe: true, // 右から左へのスライド（漫画・和書向け）
               children: List.generate(_pageCount, (index) {
                 return PdfPageImageWidget(
                   document: _pdfDocument!,
