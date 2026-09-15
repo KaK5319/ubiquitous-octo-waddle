@@ -1,4 +1,3 @@
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdfx/pdfx.dart';
@@ -75,11 +74,10 @@ class PdfViewerScreen extends StatefulWidget {
 }
 
 class _PdfViewerScreenState extends State<PdfViewerScreen> {
-  late PdfDocument _pdfDocument;
+  PdfDocument? _pdfDocument;
   final GlobalKey<PageFlipWidgetState> _controller = GlobalKey<PageFlipWidgetState>();
   bool _isLoading = true;
   int _pageCount = 0;
-  final Map<int, ImageProvider> _imageMap = {};
 
   @override
   void initState() {
@@ -88,34 +86,27 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   }
 
   Future<void> _initPdf() async {
-    _pdfDocument = await PdfDocument.openFile(widget.filePath);
-    _pageCount = _pdfDocument.pagesCount;
-
-    // 最初の数ページをロード
-    for (int i = 1; i <= _pageCount; i++) {
-      final page = await _pdfDocument.getPage(i);
-      final pageImage = await page.render(
-        width: page.width * 1.5,
-        height: page.height * 1.5,
-        format: PdfPageImageFormat.jpeg,
-      );
-      await page.close();
-
-      if (pageImage != null) {
-        _imageMap[i] = MemoryImage(pageImage.bytes);
+    try {
+      final doc = await PdfDocument.openFile(widget.filePath);
+      if (mounted) {
+        setState(() {
+          _pdfDocument = doc;
+          _pageCount = doc.pagesCount;
+          _isLoading = false;
+        });
       }
-    }
-
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
   @override
   void dispose() {
-    _pdfDocument.close();
+    _pdfDocument?.close();
     super.dispose();
   }
 
@@ -124,30 +115,82 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text('全 $_pageCount ページ'),
+        title: Text(_pageCount > 0 ? '全 $_pageCount ページ' : '読み込み中...'),
       ),
-      body: _isLoading
+      body: _isLoading || _pdfDocument == null
           ? const Center(
               child: CircularProgressIndicator(color: Colors.white),
             )
           : PageFlipWidget(
               key: _controller,
               backgroundColor: Colors.black,
-              // 3Dめくりのページ一覧を生成
               children: List.generate(_pageCount, (index) {
-                final imageProvider = _imageMap[index + 1];
-                if (imageProvider == null) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                return Container(
-                  color: Colors.white,
-                  child: Image(
-                    image: imageProvider,
-                    fit: BoxFit.contain,
-                  ),
+                return PdfPageImageWidget(
+                  document: _pdfDocument!,
+                  pageNumber: index + 1,
                 );
               }),
             ),
+    );
+  }
+}
+
+class PdfPageImageWidget extends StatefulWidget {
+  final PdfDocument document;
+  final int pageNumber;
+
+  const PdfPageImageWidget({
+    super.key,
+    required this.document,
+    required this.pageNumber,
+  });
+
+  @override
+  State<PdfPageImageWidget> createState() => _PdfPageImageWidgetState();
+}
+
+class _PdfPageImageWidgetState extends State<PdfPageImageWidget> {
+  MemoryImage? _image;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPage();
+  }
+
+  Future<void> _loadPage() async {
+    final page = await widget.document.getPage(widget.pageNumber);
+    final pageImage = await page.render(
+      width: page.width * 1.5,
+      height: page.height * 1.5,
+      format: PdfPageImageFormat.jpeg,
+    );
+    await page.close();
+
+    if (pageImage != null && mounted) {
+      setState(() {
+        _image = MemoryImage(pageImage.bytes);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_image == null) {
+      return Container(
+        color: Colors.white,
+        child: const Center(
+          child: CircularProgressIndicator(color: Colors.grey),
+        ),
+      );
+    }
+
+    return Container(
+      color: Colors.white,
+      child: Image(
+        image: _image!,
+        fit: BoxFit.contain,
+      ),
     );
   }
 }
