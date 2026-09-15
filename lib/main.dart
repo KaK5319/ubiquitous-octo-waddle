@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdfx/pdfx.dart';
+import 'package:page_flip/page_flip.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -75,28 +76,35 @@ class PdfViewerScreen extends StatefulWidget {
 
 class _PdfViewerScreenState extends State<PdfViewerScreen> {
   late PdfDocument _pdfDocument;
-  ui.FragmentShader? _shader;
+  final GlobalKey<PageFlipWidgetState> _controller = GlobalKey<PageFlipWidgetState>();
   bool _isLoading = true;
   int _pageCount = 0;
-  int _currentIndex = 0;
-  double _dragProgress = 0.0;
-
-  final Map<int, ui.Image> _imageMap = {};
+  final Map<int, ImageProvider> _imageMap = {};
 
   @override
   void initState() {
     super.initState();
-    _initShaderAndPdf();
+    _initPdf();
   }
 
-  Future<void> _initShaderAndPdf() async {
-    final program = await ui.FragmentProgram.fromAsset('shaders/page_curl.frag');
-    _shader = program.fragmentShader();
-
+  Future<void> _initPdf() async {
     _pdfDocument = await PdfDocument.openFile(widget.filePath);
     _pageCount = _pdfDocument.pagesCount;
 
-    await _manageCache(_currentIndex);
+    // 最初の数ページをロード
+    for (int i = 1; i <= _pageCount; i++) {
+      final page = await _pdfDocument.getPage(i);
+      final pageImage = await page.render(
+        width: page.width * 1.5,
+        height: page.height * 1.5,
+        format: PdfPageImageFormat.jpeg,
+      );
+      await page.close();
+
+      if (pageImage != null) {
+        _imageMap[i] = MemoryImage(pageImage.bytes);
+      }
+    }
 
     if (mounted) {
       setState(() {
@@ -105,132 +113,41 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     }
   }
 
-  Future<void> _manageCache(int index) async {
-    final neededPages = {index + 1, index + 2, index + 3};
-
-    final keysToRemove = _imageMap.keys.where((k) => !neededPages.contains(k)).toList();
-    for (var k in keysToRemove) {
-      _imageMap[k]?.dispose();
-      _imageMap.remove(k);
-    }
-
-    for (var p in neededPages) {
-      if (p >= 1 && p <= _pageCount && !_imageMap.containsKey(p)) {
-        final img = await _renderPageUi(p);
-        _imageMap[p] = img;
-      }
-    }
-
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
-  Future<ui.Image> _renderPageUi(int pageNumber) async {
-    final page = await _pdfDocument.getPage(pageNumber);
-    final pageImage = await page.render(
-      width: page.width * 1.2,
-      height: page.height * 1.2,
-      format: PdfPageImageFormat.jpeg,
-    );
-    await page.close();
-
-    final codec = await ui.instantiateImageCodec(pageImage!.bytes);
-    final frame = await codec.getNextFrame();
-    return frame.image;
-  }
-
-  void _onHorizontalDragUpdate(DragUpdateDetails details, double screenWidth) {
-    setState(() {
-      _dragProgress -= details.primaryDelta! / screenWidth;
-      _dragProgress = _dragProgress.clamp(0.0, 1.0);
-    });
-  }
-
-  void _onHorizontalDragEnd(DragEndDetails details) {
-    if (_dragProgress > 0.3 && _currentIndex + 1 < _pageCount) {
-      setState(() {
-        _currentIndex++;
-        _dragProgress = 0.0;
-      });
-      _manageCache(_currentIndex);
-    } else {
-      setState(() {
-        _dragProgress = 0.0;
-      });
-    }
-  }
-
   @override
   void dispose() {
-    for (var img in _imageMap.values) {
-      img.dispose();
-    }
     _pdfDocument.close();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final currentImg = _imageMap[_currentIndex + 1];
-    final nextImg = _imageMap[_currentIndex + 2] ?? currentImg;
-
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text('${_currentIndex + 1} / $_pageCount'),
+        title: Text('全 $_pageCount ページ'),
       ),
-      body: _isLoading || _shader == null || currentImg == null
+      body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(color: Colors.white),
             )
-          : GestureDetector(
-              onHorizontalDragUpdate: (details) => _onHorizontalDragUpdate(details, size.width),
-              onHorizontalDragEnd: _onHorizontalDragEnd,
-              child: CustomPaint(
-                size: size,
-                painter: PageCurlPainter(
-                  shader: _shader!,
-                  currentImage: currentImg,
-                  nextImage: nextImg,
-                  progress: _dragProgress,
-                ),
-              ),
+          : PageFlipWidget(
+              key: _controller,
+              backgroundColor: Colors.black,
+              // 3Dめくりのページ一覧を生成
+              children: List.generate(_pageCount, (index) {
+                final imageProvider = _imageMap[index + 1];
+                if (imageProvider == null) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                return Container(
+                  color: Colors.white,
+                  child: Image(
+                    image: imageProvider,
+                    fit: BoxFit.contain,
+                  ),
+                );
+              }),
             ),
     );
-  }
-}
-
-class PageCurlPainter extends CustomPainter {
-  final ui.FragmentShader shader;
-  final ui.Image currentImage;
-  final ui.Image? nextImage;
-  final double progress;
-
-  PageCurlPainter({
-    required this.shader,
-    required this.currentImage,
-    required this.nextImage,
-    required this.progress,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    shader.setFloat(0, size.width);
-    shader.setFloat(1, size.height);
-    shader.setFloat(2, progress);
-    shader.setImageSampler(0, currentImage);
-    shader.setImageSampler(1, nextImage ?? currentImage);
-
-    final paint = Paint()..shader = shader;
-    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant PageCurlPainter oldDelegate) {
-    return oldDelegate.progress != progress ||
-        oldDelegate.currentImage != currentImage ||
-        oldDelegate.nextImage != nextImage;
   }
 }
