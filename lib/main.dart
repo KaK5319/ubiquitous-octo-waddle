@@ -184,7 +184,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
               child: CircularProgressIndicator(color: Colors.white),
             )
           : GestureDetector(
-              // 右開き用タップ判定: 画面左側を叩くと進む（→）、右側で戻る（←）
+              // 右開き用タップ判定: 画面左側タップで次のページ（→進む）
               onTapUp: (details) {
                 final width = MediaQuery.of(context).size.width;
                 if (details.globalPosition.dx < width * 0.4) {
@@ -195,7 +195,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
               },
               child: PageView.builder(
                 controller: _pageController,
-                reverse: true, // 右開き（和書）用に有効化
+                reverse: true, // 右開き（和書）
                 itemCount: _pageCount,
                 itemBuilder: (context, index) {
                   final pageNum = index + 1;
@@ -208,19 +208,18 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                         pageOffset = (_pageController.page ?? 0.0) - index;
                       }
 
-                      // ページがめくられるアニメーションの計算
+                      // reverse: true 下での正しい回転角度計算
                       final angle = (pageOffset * (pi / 2.0)).clamp(-pi / 2.0, pi / 2.0);
                       
-                      // 右開き（背表紙が右側）の自然なめくり回転
                       final matrix = Matrix4.identity()
-                        ..setEntry(3, 2, 0.0008) // 3Dパースペクティブ
-                        ..rotateY(angle);
+                        ..setEntry(3, 2, 0.0008) // パースペクティブ（立体感）
+                        ..rotateY(-angle); // 右開き用のマイナス回転
 
                       final shadowOpacity = (pageOffset.abs() * 0.4).clamp(0.0, 0.4);
 
                       return Transform(
                         transform: matrix,
-                        alignment: Alignment.centerLeft, // 固定軸を正しく設定
+                        alignment: Alignment.centerRight, // 軸を正しく「右端（背表紙）」に設定
                         child: Stack(
                           children: [
                             child!,
@@ -233,8 +232,8 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                                         Colors.black.withOpacity(shadowOpacity),
                                         Colors.transparent,
                                       ],
-                                      begin: Alignment.centerRight,
-                                      end: Alignment.centerLeft,
+                                      begin: Alignment.centerLeft,
+                                      end: Alignment.centerRight,
                                     ),
                                   ),
                                 ),
