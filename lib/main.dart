@@ -184,7 +184,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
               child: CircularProgressIndicator(color: Colors.white),
             )
           : GestureDetector(
-              // 右開き用タップ判定: 画面左側タップで次のページ（→進む）
+              // 右開き用タップ: 画面左側タップで進む（→）、右側で戻る（←）
               onTapUp: (details) {
                 final width = MediaQuery.of(context).size.width;
                 if (details.globalPosition.dx < width * 0.4) {
@@ -208,18 +208,18 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                         pageOffset = (_pageController.page ?? 0.0) - index;
                       }
 
-                      // reverse: true 下での正しい回転角度計算
+                      // 右軸固定＆右向き（→）めくりの回転計算
                       final angle = (pageOffset * (pi / 2.0)).clamp(-pi / 2.0, pi / 2.0);
                       
                       final matrix = Matrix4.identity()
-                        ..setEntry(3, 2, 0.0008) // パースペクティブ（立体感）
-                        ..rotateY(-angle); // 右開き用のマイナス回転
+                        ..setEntry(3, 2, 0.0008) // 立体感の強調
+                        ..rotateY(angle); // 向きを反転して右方向（→）へめくる
 
                       final shadowOpacity = (pageOffset.abs() * 0.4).clamp(0.0, 0.4);
 
                       return Transform(
                         transform: matrix,
-                        alignment: Alignment.centerRight, // 軸を正しく「右端（背表紙）」に設定
+                        alignment: Alignment.centerRight, // 軸を「右端（背表紙）」に固定
                         child: Stack(
                           children: [
                             child!,
