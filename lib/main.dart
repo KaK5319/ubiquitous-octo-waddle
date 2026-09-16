@@ -151,6 +151,21 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     return null;
   }
 
+  // 高速ページ切り替え処理（150ミリ秒の爆速アニメーション）
+  void _nextPage() {
+    _pageController.nextPage(
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.fastOutSlowIn,
+    );
+  }
+
+  void _previousPage() {
+    _pageController.previousPage(
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.fastOutSlowIn,
+    );
+  }
+
   @override
   void dispose() {
     _pdfDocument?.close();
@@ -169,66 +184,77 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
           ? const Center(
               child: CircularProgressIndicator(color: Colors.white),
             )
-          : PageView.builder(
-              controller: _pageController,
-              reverse: false, // 標準の左から右スワイプ方向へ変更
-              itemCount: _pageCount,
-              itemBuilder: (context, index) {
-                final pageNum = index + 1;
+          : GestureDetector(
+              // 画面左右端のタップで爆速めくり
+              onTapUp: (details) {
+                final width = MediaQuery.of(context).size.width;
+                if (details.globalPosition.dx > width * 0.6) {
+                  _nextPage(); // 画面右側タップで次ページへ
+                } else if (details.globalPosition.dx < width * 0.4) {
+                  _previousPage(); // 画面左側タップで前ページへ
+                }
+              },
+              child: PageView.builder(
+                controller: _pageController,
+                reverse: false,
+                itemCount: _pageCount,
+                itemBuilder: (context, index) {
+                  final pageNum = index + 1;
 
-                return AnimatedBuilder(
-                  animation: _pageController,
-                  builder: (context, child) {
-                    double pageOffset = 0.0;
-                    if (_pageController.position.haveDimensions) {
-                      pageOffset = (_pageController.page ?? 0.0) - index;
-                    }
+                  return AnimatedBuilder(
+                    animation: _pageController,
+                    builder: (context, child) {
+                      double pageOffset = 0.0;
+                      if (_pageController.position.haveDimensions) {
+                        pageOffset = (_pageController.page ?? 0.0) - index;
+                      }
 
-                    // 右固定軸（→方向）へ開くための角度計算
-                    final angle = (pageOffset * (pi / 2.0)).clamp(-pi / 2.0, pi / 2.0);
-                    
-                    final matrix = Matrix4.identity()
-                      ..setEntry(3, 2, 0.0001)
-                      ..rotateY(-angle); // 右向き（→）へ開く回転
+                      // ドラッグ時の反応角度の倍率を1.5倍に引き上げてスピーディーに
+                      final angle = (pageOffset * (pi / 1.5)).clamp(-pi / 2.0, pi / 2.0);
+                      
+                      final matrix = Matrix4.identity()
+                        ..setEntry(3, 2, 0.0001)
+                        ..rotateY(-angle);
 
-                    final shadowOpacity = (pageOffset.abs() * 0.4).clamp(0.0, 0.4);
+                      final shadowOpacity = (pageOffset.abs() * 0.3).clamp(0.0, 0.3);
 
-                    return Transform(
-                      transform: matrix,
-                      alignment: Alignment.centerRight, // 右端を固定軸に設定
-                      child: Stack(
-                        children: [
-                          child!,
-                          if (pageOffset != 0)
-                            Positioned.fill(
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      Colors.black.withOpacity(shadowOpacity),
-                                      Colors.transparent,
-                                    ],
-                                    begin: Alignment.centerLeft,
-                                    end: Alignment.centerRight,
+                      return Transform(
+                        transform: matrix,
+                        alignment: Alignment.centerRight,
+                        child: Stack(
+                          children: [
+                            child!,
+                            if (pageOffset != 0)
+                              Positioned.fill(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        Colors.black.withOpacity(shadowOpacity),
+                                        Colors.transparent,
+                                      ],
+                                      begin: Alignment.centerLeft,
+                                      end: Alignment.centerRight,
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                        ],
-                      ),
-                    );
-                  },
-                  child: PdfPageWidget(
-                    pageNumber: pageNum,
-                    imageCache: _imageCache,
-                    loadPage: () => _loadSinglePage(pageNum),
-                    preloadNeighbors: () {
-                      if (pageNum + 1 <= _pageCount) _loadSinglePage(pageNum + 1);
-                      if (pageNum - 1 >= 1) _loadSinglePage(pageNum - 1);
+                          ],
+                        ),
+                      );
                     },
-                  ),
-                );
-              },
+                    child: PdfPageWidget(
+                      pageNumber: pageNum,
+                      imageCache: _imageCache,
+                      loadPage: () => _loadSinglePage(pageNum),
+                      preloadNeighbors: () {
+                        if (pageNum + 1 <= _pageCount) _loadSinglePage(pageNum + 1);
+                        if (pageNum - 1 >= 1) _loadSinglePage(pageNum - 1);
+                      },
+                    ),
+                  );
+                },
+              ),
             ),
     );
   }
