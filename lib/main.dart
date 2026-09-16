@@ -171,7 +171,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
             )
           : PageView.builder(
               controller: _pageController,
-              reverse: true, // 右開き設定
+              reverse: false, // 標準の左から右スワイプ方向へ変更
               itemCount: _pageCount,
               itemBuilder: (context, index) {
                 final pageNum = index + 1;
@@ -184,19 +184,18 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                       pageOffset = (_pageController.page ?? 0.0) - index;
                     }
 
-                    // 右開き用の角度計算（右端を軸に左方向へ回す）
+                    // 右固定軸（→方向）へ開くための角度計算
                     final angle = (pageOffset * (pi / 2.0)).clamp(-pi / 2.0, pi / 2.0);
                     
-                    // 遠近感の係数を0.0001まで極小化して、立体が不自然に出っ張るのを防ぐ
                     final matrix = Matrix4.identity()
                       ..setEntry(3, 2, 0.0001)
-                      ..rotateY(angle);
+                      ..rotateY(-angle); // 右向き（→）へ開く回転
 
                     final shadowOpacity = (pageOffset.abs() * 0.4).clamp(0.0, 0.4);
 
                     return Transform(
                       transform: matrix,
-                      alignment: Alignment.centerRight, // 回転軸を「右端」に固定
+                      alignment: Alignment.centerRight, // 右端を固定軸に設定
                       child: Stack(
                         children: [
                           child!,
@@ -206,8 +205,8 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
                                     colors: [
-                                      Colors.transparent,
                                       Colors.black.withOpacity(shadowOpacity),
+                                      Colors.transparent,
                                     ],
                                     begin: Alignment.centerLeft,
                                     end: Alignment.centerRight,
