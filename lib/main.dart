@@ -184,34 +184,29 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                       pageOffset = (_pageController.page ?? 0.0) - index;
                     }
 
-                    // ページがめくられるアニメーションの各種計算
-                    final isCurrentPage = pageOffset >= 0 && pageOffset <= 1;
-                    
-                    // 回転軸を本の「背（左側）」に固定
-                    final angle = (pageOffset * (pi / 2.2)).clamp(0.0, pi / 2.2);
+                    // 右開き用の回転計算（右側を固定軸にして左へめくる）
+                    final angle = (-pageOffset * (pi / 2.2)).clamp(-pi / 2.2, 0.0);
                     
                     final matrix = Matrix4.identity()
-                      ..setEntry(3, 2, 0.0005) // 遠近感の微調整（板っぽさを排除）
+                      ..setEntry(3, 2, 0.0005)
                       ..rotateY(angle);
 
-                    // 影の濃さを手前のめくれ具合に合わせて変化
-                    final shadowOpacity = (pageOffset * 0.5).clamp(0.0, 0.5);
+                    final shadowOpacity = (pageOffset.abs() * 0.5).clamp(0.0, 0.5);
 
                     return Transform(
                       transform: matrix,
-                      alignment: Alignment.centerLeft, // 左端（背表紙）を軸にする
+                      alignment: Alignment.centerRight, // 回転軸を右側に配置
                       child: Stack(
                         children: [
                           child!,
-                          // めくる紙の背面に自然な内側グラデーション影を付与
-                          if (isCurrentPage && pageOffset > 0)
+                          if (pageOffset > 0)
                             Positioned.fill(
                               child: Container(
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
                                     colors: [
-                                      Colors.black.withOpacity(shadowOpacity),
                                       Colors.transparent,
+                                      Colors.black.withOpacity(shadowOpacity),
                                     ],
                                     begin: Alignment.centerLeft,
                                     end: Alignment.centerRight,
