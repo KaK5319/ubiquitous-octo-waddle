@@ -195,40 +195,38 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                     if (_pageController.position.haveDimensions) {
                       position = (_pageController.page ?? 0.0) - index;
                     }
-                    
-                    // 90度（半開き）を超えたら背面（裏側）を描画しない保護
-                    final isBackFace = position.abs() > 0.5;
-                    
-                    // カール計算と回転角度
-                    final angle = position * (pi / 2.5);
-                    final matrix = Matrix4.identity()
-                      ..setEntry(3, 2, 0.0012)
-                      ..rotateY(angle);
 
-                    // ページ接合部のリアルな影（グラデーション）
-                    final shadowOpacity = (position.abs()).clamp(0.0, 0.6);
+                    // めくる方向と回転軸の設定
+                    final isMovingRight = position > 0;
+                    final angle = position * (pi / 2);
+                    
+                    final matrix = Matrix4.identity()
+                      ..setEntry(3, 2, 0.0008)
+                      ..rotateY(-angle);
+
+                    // ページの裏面隠し
+                    final isBackFace = position.abs() > 0.5;
 
                     return Transform(
                       transform: matrix,
-                      alignment: position > 0 ? Alignment.centerLeft : Alignment.centerRight,
+                      alignment: isMovingRight ? Alignment.centerRight : Alignment.centerLeft,
                       child: Stack(
                         children: [
-                          // 90度以上回った時は白地（紙の裏面）で隠す
                           if (isBackFace)
                             Container(color: Colors.white)
                           else
                             child!,
-                          // めくり部分の陰影
+                          // 紙の影エフェクト
                           Positioned.fill(
                             child: Container(
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
                                   colors: [
-                                    Colors.black.withOpacity(shadowOpacity),
+                                    Colors.black.withOpacity((position.abs() * 0.4).clamp(0.0, 0.4)),
                                     Colors.transparent,
                                   ],
-                                  begin: position > 0 ? Alignment.centerLeft : Alignment.centerRight,
-                                  end: position > 0 ? Alignment.centerRight : Alignment.centerLeft,
+                                  begin: isMovingRight ? Alignment.centerLeft : Alignment.centerRight,
+                                  end: isMovingRight ? Alignment.centerRight : Alignment.centerLeft,
                                 ),
                               ),
                             ),
