@@ -79,7 +79,11 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   final GlobalKey<PageFlipWidgetState> _controller = GlobalKey<PageFlipWidgetState>();
   bool _isLoading = true;
   int _pageCount = 0;
+  bool _isRightSwipe = false; // めくり方向の切替用（デフォルト：左→右）
+  
+  // キャッシュ制御
   final Map<int, ImageProvider> _imageCache = {};
+  bool _isRendering = false;
 
   @override
   void initState() {
@@ -93,10 +97,9 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       _pdfDocument = doc;
       _pageCount = doc.pagesCount;
 
-      final initialLoadCount = _pageCount < 8 ? _pageCount : 8;
-      for (int i = 1; i <= initialLoadCount; i++) {
-        await _preloadPage(i);
-      }
+      // 最初の2ページだけ超高速で読み込み
+      await _loadSinglePage(1);
+      if (_pageCount >= 2) await _loadSinglePage(2);
 
       if (mounted) {
         setState(() {
@@ -112,18 +115,31 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     }
   }
 
-  Future<ImageProvider?> _preloadPage(int pageNumber) async {
+  // ページの単一レンダリング（割り込み優先制御付き）
+  Future<ImageProvider?> _loadSinglePage(int pageNumber) async {
     if (_imageCache.containsKey(pageNumber)) {
       return _imageCache[pageNumber];
     }
+
+    // 他のレンダリングが終わるまで少し待機（キュー詰まり防止）
+    while (_isRendering) {
+      await Future.delayed(const Duration(milliseconds: 20));
+    }
+
+    if (_imageCache.containsKey(pageNumber)) {
+      return _imageCache[pageNumber];
+    }
+
     final doc = _pdfDocument;
     if (doc == null) return null;
+
+    _isRendering = true;
 
     try {
       final page = await doc.getPage(pageNumber);
       final pageImage = await page.render(
-        width: page.width * 1.2,
-        height: page.height * 1.2,
+        width: page.width * 1.0, // 低負荷で爆速レンダリング
+        height: page.height * 1.0,
         format: PdfPageImageFormat.jpeg,
       );
       await page.close();
@@ -131,9 +147,12 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       if (pageImage != null) {
         final provider = MemoryImage(pageImage.bytes);
         _imageCache[pageNumber] = provider;
+        _isRendering = false;
         return provider;
       }
     } catch (_) {}
+
+    _isRendering = false;
     return null;
   }
 
@@ -149,6 +168,18 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       backgroundColor: Colors.black,
       appBar: AppBar(
         title: Text(_pageCount > 0 ? '全 $_pageCount ページ' : '読み込み中...'),
+        actions: [
+          // めくり方向の切り替えボタン
+          IconButton(
+            icon: Icon(_isRightSwipe ? Icons.format_line_spacing : Icons.swap_horiz),
+            tooltip: 'めくり方向切り替え',
+            onPressed: () {
+              setState(() {
+                _isRightSwipe = !_isRightSwipe;
+              });
+            },
+          ),
+        ],
       ),
       body: _isLoading || _pdfDocument == null
           ? const Center(
@@ -156,18 +187,19 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
             )
           : PageFlipWidget(
               key: _controller,
+              isRightSwipe: _isRightSwipe,
               children: List.generate(_pageCount, (index) {
                 final pageNum = index + 1;
-                
-                for (int i = 1; i <= 3; i++) {
-                  if (pageNum + i <= _pageCount) _preloadPage(pageNum + i);
-                  if (pageNum - i >= 1) _preloadPage(pageNum - i);
-                }
 
-                return PdfPageCachedWidget(
+                return PdfPageWidget(
                   pageNumber: pageNum,
                   imageCache: _imageCache,
-                  loadTask: () => _preloadPage(pageNum),
+                  loadPage: () => _loadSinglePage(pageNum),
+                  preloadNeighbors: () {
+                    // 現在ページの「前後1ページ」だけを最優先で直前確保
+                    if (pageNum + 1 <= _pageCount) _loadSinglePage(pageNum + 1);
+                    if (pageNum - 1 >= 1) _loadSinglePage(pageNum - 1);
+                  },
                 );
               }),
             ),
@@ -175,51 +207,57 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   }
 }
 
-class PdfPageCachedWidget extends StatefulWidget {
+class PdfPageWidget extends StatefulWidget {
   final int pageNumber;
   final Map<int, ImageProvider> imageCache;
-  final Future<ImageProvider?> Function() loadTask;
+  final Future<ImageProvider?> Function() loadPage;
+  final VoidCallback preloadNeighbors;
 
-  const PdfPageCachedWidget({
+  const PdfPageWidget({
     super.key,
     required this.pageNumber,
     required this.imageCache,
-    required this.loadTask,
+    required this.loadPage,
+    required this.preloadNeighbors,
   });
 
   @override
-  State<PdfPageCachedWidget> createState() => _PdfPageCachedWidgetState();
+  State<PdfPageWidget> createState() => _PdfPageWidgetState();
 }
 
-class _PdfPageCachedWidgetState extends State<PdfPageCachedWidget> {
+class _PdfPageWidgetState extends State<PdfPageWidget> {
   ImageProvider? _image;
 
   @override
   void initState() {
     super.initState();
-    _loadImage();
+    _fetchPage();
   }
 
-  Future<void> _loadImage() async {
+  Future<void> _fetchPage() async {
     if (widget.imageCache.containsKey(widget.pageNumber)) {
       if (mounted) {
         setState(() {
           _image = widget.imageCache[widget.pageNumber];
         });
+        widget.preloadNeighbors();
       }
-    } else {
-      final img = await widget.loadTask();
-      if (mounted) {
-        setState(() {
-          _image = img;
-        });
-      }
+      return;
+    }
+
+    final img = await widget.loadPage();
+    if (mounted && img != null) {
+      setState(() {
+        _image = img;
+      });
+      widget.preloadNeighbors();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final img = _image;
+    final img = _image ?? widget.imageCache[widget.pageNumber];
+
     if (img == null) {
       return Container(
         color: Colors.white,
