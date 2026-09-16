@@ -133,8 +133,8 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     try {
       final page = await doc.getPage(pageNumber);
       final pageImage = await page.render(
-        width: page.width * 1.0,
-        height: page.height * 1.0,
+        width: page.width * 1.2,
+        height: page.height * 1.2,
         format: PdfPageImageFormat.jpeg,
       );
       await page.close();
@@ -151,18 +151,17 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     return null;
   }
 
-  // 高速ページ切り替え処理（150ミリ秒の爆速アニメーション）
   void _nextPage() {
     _pageController.nextPage(
-      duration: const Duration(milliseconds: 150),
-      curve: Curves.fastOutSlowIn,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
     );
   }
 
   void _previousPage() {
     _pageController.previousPage(
-      duration: const Duration(milliseconds: 150),
-      curve: Curves.fastOutSlowIn,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
     );
   }
 
@@ -185,18 +184,18 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
               child: CircularProgressIndicator(color: Colors.white),
             )
           : GestureDetector(
-              // 画面左右端のタップで爆速めくり
+              // 右開き用タップ判定: 画面左側を叩くと進む（→）、右側で戻る（←）
               onTapUp: (details) {
                 final width = MediaQuery.of(context).size.width;
-                if (details.globalPosition.dx > width * 0.6) {
-                  _nextPage(); // 画面右側タップで次ページへ
-                } else if (details.globalPosition.dx < width * 0.4) {
-                  _previousPage(); // 画面左側タップで前ページへ
+                if (details.globalPosition.dx < width * 0.4) {
+                  _nextPage();
+                } else if (details.globalPosition.dx > width * 0.6) {
+                  _previousPage();
                 }
               },
               child: PageView.builder(
                 controller: _pageController,
-                reverse: false,
+                reverse: true, // 右開き（和書）用に有効化
                 itemCount: _pageCount,
                 itemBuilder: (context, index) {
                   final pageNum = index + 1;
@@ -209,18 +208,19 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                         pageOffset = (_pageController.page ?? 0.0) - index;
                       }
 
-                      // ドラッグ時の反応角度の倍率を1.5倍に引き上げてスピーディーに
-                      final angle = (pageOffset * (pi / 1.5)).clamp(-pi / 2.0, pi / 2.0);
+                      // ページがめくられるアニメーションの計算
+                      final angle = (pageOffset * (pi / 2.0)).clamp(-pi / 2.0, pi / 2.0);
                       
+                      // 右開き（背表紙が右側）の自然なめくり回転
                       final matrix = Matrix4.identity()
-                        ..setEntry(3, 2, 0.0001)
-                        ..rotateY(-angle);
+                        ..setEntry(3, 2, 0.0008) // 3Dパースペクティブ
+                        ..rotateY(angle);
 
-                      final shadowOpacity = (pageOffset.abs() * 0.3).clamp(0.0, 0.3);
+                      final shadowOpacity = (pageOffset.abs() * 0.4).clamp(0.0, 0.4);
 
                       return Transform(
                         transform: matrix,
-                        alignment: Alignment.centerRight,
+                        alignment: Alignment.centerLeft, // 固定軸を正しく設定
                         child: Stack(
                           children: [
                             child!,
@@ -233,8 +233,8 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                                         Colors.black.withOpacity(shadowOpacity),
                                         Colors.transparent,
                                       ],
-                                      begin: Alignment.centerLeft,
-                                      end: Alignment.centerRight,
+                                      begin: Alignment.centerRight,
+                                      end: Alignment.centerLeft,
                                     ),
                                   ),
                                 ),
