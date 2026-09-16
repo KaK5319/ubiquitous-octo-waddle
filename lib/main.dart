@@ -41,10 +41,11 @@ class _BookshelfScreenState extends State<BookshelfScreen> {
 
     if (result != null && result.files.single.path != null) {
       if (!mounted) return;
+      final path = result.files.single.path!;
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => PdfViewerScreen(filePath: result.files.single.path!),
+          builder: (context) => PdfViewerScreen(filePath: path),
         ),
       );
     }
@@ -78,8 +79,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   final GlobalKey<PageFlipWidgetState> _controller = GlobalKey<PageFlipWidgetState>();
   bool _isLoading = true;
   int _pageCount = 0;
-  
-  // キャッシュ保持用
   final Map<int, ImageProvider> _imageCache = {};
 
   @override
@@ -94,18 +93,17 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       _pdfDocument = doc;
       _pageCount = doc.pagesCount;
 
-      // 初期起動時に最初の8ページを一括爆速ロード
       final initialLoadCount = _pageCount < 8 ? _pageCount : 8;
-      await Future.wait(
-        List.generate(initialLoadCount, (i) => _preloadPage(i + 1)),
-      );
+      for (int i = 1; i <= initialLoadCount; i++) {
+        await _preloadPage(i);
+      }
 
       if (mounted) {
         setState(() {
           _isLoading = false;
         });
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -114,16 +112,15 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     }
   }
 
-  // レンダリング倍率を最適化して爆速プリロード
   Future<ImageProvider?> _preloadPage(int pageNumber) async {
     if (_imageCache.containsKey(pageNumber)) {
       return _imageCache[pageNumber];
     }
-    if (_pdfDocument == null) return null;
+    final doc = _pdfDocument;
+    if (doc == null) return null;
 
     try {
-      final page = await _pdfDocument!.getPage(pageNumber);
-      // 1.2倍率に抑えてレンダリング時間を半減＆軽量化
+      final page = await doc.getPage(pageNumber);
       final pageImage = await page.render(
         width: page.width * 1.2,
         height: page.height * 1.2,
@@ -160,14 +157,13 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
           : PageFlipWidget(
               key: _controller,
               backgroundColor: Colors.black,
-              isRightSwipe: false, // めくり方向を「逆向き」に反転（左→右で進む）
-              cutoff: 0.1,         // 超高感度（わずかなスワイプで捲れる）
-              duration: const Duration(milliseconds: 150), // 限界レベルの爆速アニメーション (150ms)
+              isRightSwipe: false,
+              cutoff: 0.1,
+              duration: const Duration(milliseconds: 150),
               children: List.generate(_pageCount, (index) {
                 final pageNum = index + 1;
                 
-                // 前後5ページ分を裏で強力に自動プリロード
-                for (int i = 1; i <= 5; i++) {
+                for (int i = 1; i <= 3; i++) {
                   if (pageNum + i <= _pageCount) _preloadPage(pageNum + i);
                   if (pageNum - i >= 1) _preloadPage(pageNum - i);
                 }
@@ -210,9 +206,11 @@ class _PdfPageCachedWidgetState extends State<PdfPageCachedWidget> {
 
   Future<void> _loadImage() async {
     if (widget.imageCache.containsKey(widget.pageNumber)) {
-      setState(() {
-        _image = widget.imageCache[widget.pageNumber];
-      });
+      if (mounted) {
+        setState(() {
+          _image = widget.imageCache[widget.pageNumber];
+        });
+      }
     } else {
       final img = await widget.loadTask();
       if (mounted) {
@@ -225,7 +223,8 @@ class _PdfPageCachedWidgetState extends State<PdfPageCachedWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (_image == null) {
+    final img = _image;
+    if (img == null) {
       return Container(
         color: Colors.white,
         child: const Center(
@@ -237,7 +236,7 @@ class _PdfPageCachedWidgetState extends State<PdfPageCachedWidget> {
     return Container(
       color: Colors.white,
       child: Image(
-        image: _image!,
+        image: img,
         fit: BoxFit.contain,
       ),
     );
