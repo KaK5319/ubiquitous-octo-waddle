@@ -184,18 +184,18 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                       pageOffset = (_pageController.page ?? 0.0) - index;
                     }
 
-                    // 右開き用の回転計算（右側を固定軸にして左へめくる）
-                    final angle = (-pageOffset * (pi / 2.2)).clamp(-pi / 2.2, 0.0);
+                    // 右開きの正しい回転（左側の「背」を固定軸にして、右側から左側へ回転して移動させる）
+                    final angle = (pageOffset * (pi / 2.2)).clamp(0.0, pi / 2.2);
                     
                     final matrix = Matrix4.identity()
                       ..setEntry(3, 2, 0.0005)
-                      ..rotateY(angle);
+                      ..rotateY(-angle); // 逆回転で右から左にめくる
 
                     final shadowOpacity = (pageOffset.abs() * 0.5).clamp(0.0, 0.5);
 
                     return Transform(
                       transform: matrix,
-                      alignment: Alignment.centerRight, // 回転軸を右側に配置
+                      alignment: Alignment.centerLeft, // 本の背（左端）を固定軸に設定
                       child: Stack(
                         children: [
                           child!,
@@ -205,8 +205,8 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
                                     colors: [
-                                      Colors.transparent,
                                       Colors.black.withOpacity(shadowOpacity),
+                                      Colors.transparent,
                                     ],
                                     begin: Alignment.centerLeft,
                                     end: Alignment.centerRight,
