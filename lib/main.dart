@@ -171,7 +171,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
             )
           : PageView.builder(
               controller: _pageController,
-              reverse: true, // 右開き（漫画の進行方向）
+              reverse: true, // 右開き設定
               itemCount: _pageCount,
               itemBuilder: (context, index) {
                 final pageNum = index + 1;
@@ -184,29 +184,30 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                       pageOffset = (_pageController.page ?? 0.0) - index;
                     }
 
-                    // 右開きの正しい回転（左側の「背」を固定軸にして、右側から左側へ回転して移動させる）
-                    final angle = (pageOffset * (pi / 2.2)).clamp(0.0, pi / 2.2);
+                    // 右開き用の角度計算（右端を軸に左方向へ回す）
+                    final angle = (pageOffset * (pi / 2.0)).clamp(-pi / 2.0, pi / 2.0);
                     
+                    // 遠近感の係数を0.0001まで極小化して、立体が不自然に出っ張るのを防ぐ
                     final matrix = Matrix4.identity()
-                      ..setEntry(3, 2, 0.0005)
-                      ..rotateY(-angle); // 逆回転で右から左にめくる
+                      ..setEntry(3, 2, 0.0001)
+                      ..rotateY(angle);
 
-                    final shadowOpacity = (pageOffset.abs() * 0.5).clamp(0.0, 0.5);
+                    final shadowOpacity = (pageOffset.abs() * 0.4).clamp(0.0, 0.4);
 
                     return Transform(
                       transform: matrix,
-                      alignment: Alignment.centerLeft, // 本の背（左端）を固定軸に設定
+                      alignment: Alignment.centerRight, // 回転軸を「右端」に固定
                       child: Stack(
                         children: [
                           child!,
-                          if (pageOffset > 0)
+                          if (pageOffset != 0)
                             Positioned.fill(
                               child: Container(
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
                                     colors: [
-                                      Colors.black.withOpacity(shadowOpacity),
                                       Colors.transparent,
+                                      Colors.black.withOpacity(shadowOpacity),
                                     ],
                                     begin: Alignment.centerLeft,
                                     end: Alignment.centerRight,
