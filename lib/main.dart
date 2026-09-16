@@ -1,7 +1,7 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdfx/pdfx.dart';
-import 'package:page_flip_builder/page_flip_builder.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -76,13 +76,12 @@ class PdfViewerScreen extends StatefulWidget {
 
 class _PdfViewerScreenState extends State<PdfViewerScreen> {
   PdfDocument? _pdfDocument;
+  final PageController _pageController = PageController();
   bool _isLoading = true;
   int _pageCount = 0;
-  int _currentPageIndex = 0;
   
   final Map<int, ImageProvider> _imageCache = {};
   bool _isRendering = false;
-  final pageFlipKey = GlobalKey<PageFlipBuilderState>();
 
   @override
   void initState() {
@@ -155,6 +154,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   @override
   void dispose() {
     _pdfDocument?.close();
+    _pageController.dispose();
     super.dispose();
   }
 
@@ -163,34 +163,77 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text(_pageCount > 0 ? '全 $_pageCount ページ (${_currentPageIndex + 1})' : '読み込み中...'),
+        title: Text(_pageCount > 0 ? '全 $_pageCount ページ' : '読み込み中...'),
       ),
       body: _isLoading || _pdfDocument == null
           ? const Center(
               child: CircularProgressIndicator(color: Colors.white),
             )
-          : PageFlipBuilder(
-              key: pageFlipKey,
-              isRightToLeft: true, // 右開き（漫画のめくり方向）
-              onPageFlip: (pageIndex) {
-                setState(() {
-                  _currentPageIndex = pageIndex;
-                });
-                // 先回り読み込み
-                final pageNum = pageIndex + 1;
-                if (pageNum + 1 <= _pageCount) _loadSinglePage(pageNum + 1);
-                if (pageNum - 1 >= 1) _loadSinglePage(pageNum - 1);
+          : PageView.builder(
+              controller: _pageController,
+              reverse: true, // 右開き（漫画の進行方向）
+              itemCount: _pageCount,
+              itemBuilder: (context, index) {
+                final pageNum = index + 1;
+
+                return AnimatedBuilder(
+                  animation: _pageController,
+                  builder: (context, child) {
+                    double pageOffset = 0.0;
+                    if (_pageController.position.haveDimensions) {
+                      pageOffset = (_pageController.page ?? 0.0) - index;
+                    }
+
+                    // ページがめくられるアニメーションの各種計算
+                    final isCurrentPage = pageOffset >= 0 && pageOffset <= 1;
+                    
+                    // 回転軸を本の「背（左側）」に固定
+                    final angle = (pageOffset * (pi / 2.2)).clamp(0.0, pi / 2.2);
+                    
+                    final matrix = Matrix4.identity()
+                      ..setEntry(3, 2, 0.0005) // 遠近感の微調整（板っぽさを排除）
+                      ..rotateY(angle);
+
+                    // 影の濃さを手前のめくれ具合に合わせて変化
+                    final shadowOpacity = (pageOffset * 0.5).clamp(0.0, 0.5);
+
+                    return Transform(
+                      transform: matrix,
+                      alignment: Alignment.centerLeft, // 左端（背表紙）を軸にする
+                      child: Stack(
+                        children: [
+                          child!,
+                          // めくる紙の背面に自然な内側グラデーション影を付与
+                          if (isCurrentPage && pageOffset > 0)
+                            Positioned.fill(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.black.withOpacity(shadowOpacity),
+                                      Colors.transparent,
+                                    ],
+                                    begin: Alignment.centerLeft,
+                                    end: Alignment.centerRight,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                  child: PdfPageWidget(
+                    pageNumber: pageNum,
+                    imageCache: _imageCache,
+                    loadPage: () => _loadSinglePage(pageNum),
+                    preloadNeighbors: () {
+                      if (pageNum + 1 <= _pageCount) _loadSinglePage(pageNum + 1);
+                      if (pageNum - 1 >= 1) _loadSinglePage(pageNum - 1);
+                    },
+                  ),
+                );
               },
-              frontBuilder: (context) => PdfPageWidget(
-                pageNumber: _currentPageIndex + 1,
-                imageCache: _imageCache,
-                loadPage: () => _loadSinglePage(_currentPageIndex + 1),
-              ),
-              backBuilder: (context) => PdfPageWidget(
-                pageNumber: (_currentPageIndex + 2).clamp(1, _pageCount),
-                imageCache: _imageCache,
-                loadPage: () => _loadSinglePage((_currentPageIndex + 2).clamp(1, _pageCount)),
-              ),
             ),
     );
   }
@@ -200,12 +243,14 @@ class PdfPageWidget extends StatefulWidget {
   final int pageNumber;
   final Map<int, ImageProvider> imageCache;
   final Future<ImageProvider?> Function() loadPage;
+  final VoidCallback preloadNeighbors;
 
   const PdfPageWidget({
     super.key,
     required this.pageNumber,
     required this.imageCache,
     required this.loadPage,
+    required this.preloadNeighbors,
   });
 
   @override
@@ -221,20 +266,13 @@ class _PdfPageWidgetState extends State<PdfPageWidget> {
     _fetchPage();
   }
 
-  @override
-  void didUpdateWidget(covariant PdfPageWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.pageNumber != widget.pageNumber) {
-      _fetchPage();
-    }
-  }
-
   Future<void> _fetchPage() async {
     if (widget.imageCache.containsKey(widget.pageNumber)) {
       if (mounted) {
         setState(() {
           _image = widget.imageCache[widget.pageNumber];
         });
+        widget.preloadNeighbors();
       }
       return;
     }
@@ -244,6 +282,7 @@ class _PdfPageWidgetState extends State<PdfPageWidget> {
       setState(() {
         _image = img;
       });
+      widget.preloadNeighbors();
     }
   }
 
