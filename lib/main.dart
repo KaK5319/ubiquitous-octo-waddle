@@ -156,9 +156,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
             )
           : PageFlipWidget(
               key: _controller,
-              backgroundColor: Colors.black,
-              isRightSwipe: false, // 逆向きめくり対応
-              cutoff: 0.1,         // 軽くスワイプするだけで速くめくれる高感度設定
               children: List.generate(_pageCount, (index) {
                 final pageNum = index + 1;
                 
