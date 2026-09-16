@@ -1,7 +1,7 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdfx/pdfx.dart';
-import 'package:page_flip/page_flip.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -76,12 +76,11 @@ class PdfViewerScreen extends StatefulWidget {
 
 class _PdfViewerScreenState extends State<PdfViewerScreen> {
   PdfDocument? _pdfDocument;
-  final GlobalKey<PageFlipWidgetState> _controller = GlobalKey<PageFlipWidgetState>();
+  PageController _pageController = PageController();
   bool _isLoading = true;
   int _pageCount = 0;
-  bool _isRightSwipe = false; // めくり方向の切替用（デフォルト：左→右）
+  bool _isRightToLeft = true; // デフォルト：右開き（右→左へめくる）
   
-  // キャッシュ制御
   final Map<int, ImageProvider> _imageCache = {};
   bool _isRendering = false;
 
@@ -97,7 +96,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       _pdfDocument = doc;
       _pageCount = doc.pagesCount;
 
-      // 最初の2ページだけ超高速で読み込み
       await _loadSinglePage(1);
       if (_pageCount >= 2) await _loadSinglePage(2);
 
@@ -115,15 +113,13 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     }
   }
 
-  // ページの単一レンダリング（割り込み優先制御付き）
   Future<ImageProvider?> _loadSinglePage(int pageNumber) async {
     if (_imageCache.containsKey(pageNumber)) {
       return _imageCache[pageNumber];
     }
 
-    // 他のレンダリングが終わるまで少し待機（キュー詰まり防止）
     while (_isRendering) {
-      await Future.delayed(const Duration(milliseconds: 20));
+      await Future.delayed(const Duration(milliseconds: 10));
     }
 
     if (_imageCache.containsKey(pageNumber)) {
@@ -138,7 +134,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     try {
       final page = await doc.getPage(pageNumber);
       final pageImage = await page.render(
-        width: page.width * 1.0, // 低負荷で爆速レンダリング
+        width: page.width * 1.0,
         height: page.height * 1.0,
         format: PdfPageImageFormat.jpeg,
       );
@@ -159,6 +155,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   @override
   void dispose() {
     _pdfDocument?.close();
+    _pageController.dispose();
     super.dispose();
   }
 
@@ -169,13 +166,12 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       appBar: AppBar(
         title: Text(_pageCount > 0 ? '全 $_pageCount ページ' : '読み込み中...'),
         actions: [
-          // めくり方向の切り替えボタン
           IconButton(
-            icon: Icon(_isRightSwipe ? Icons.format_line_spacing : Icons.swap_horiz),
+            icon: Icon(_isRightToLeft ? Icons.swap_horiz : Icons.format_line_spacing),
             tooltip: 'めくり方向切り替え',
             onPressed: () {
               setState(() {
-                _isRightSwipe = !_isRightSwipe;
+                _isRightToLeft = !_isRightToLeft;
               });
             },
           ),
@@ -185,23 +181,43 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
           ? const Center(
               child: CircularProgressIndicator(color: Colors.white),
             )
-          : PageFlipWidget(
-              key: _controller,
-              isRightSwipe: _isRightSwipe,
-              children: List.generate(_pageCount, (index) {
+          : PageView.builder(
+              controller: _pageController,
+              reverse: _isRightToLeft, // めくり方向の逆転対応
+              itemCount: _pageCount,
+              itemBuilder: (context, index) {
                 final pageNum = index + 1;
 
-                return PdfPageWidget(
-                  pageNumber: pageNum,
-                  imageCache: _imageCache,
-                  loadPage: () => _loadSinglePage(pageNum),
-                  preloadNeighbors: () {
-                    // 現在ページの「前後1ページ」だけを最優先で直前確保
-                    if (pageNum + 1 <= _pageCount) _loadSinglePage(pageNum + 1);
-                    if (pageNum - 1 >= 1) _loadSinglePage(pageNum - 1);
+                return AnimatedBuilder(
+                  animation: _pageController,
+                  builder: (context, child) {
+                    double position = 0.0;
+                    if (_pageController.position.haveDimensions) {
+                      position = (_pageController.page ?? 0.0) - index;
+                    }
+                    
+                    // 限界爆速の立体カールドロップエフェクト
+                    final matrix = Matrix4.identity()
+                      ..setEntry(3, 2, 0.001)
+                      ..rotateY(position * (pi / 3));
+
+                    return Transform(
+                      transform: matrix,
+                      alignment: position > 0 ? Alignment.centerLeft : Alignment.centerRight,
+                      child: child,
+                    );
                   },
+                  child: PdfPageWidget(
+                    pageNumber: pageNum,
+                    imageCache: _imageCache,
+                    loadPage: () => _loadSinglePage(pageNum),
+                    preloadNeighbors: () {
+                      if (pageNum + 1 <= _pageCount) _loadSinglePage(pageNum + 1);
+                      if (pageNum - 1 >= 1) _loadSinglePage(pageNum - 1);
+                    },
+                  ),
                 );
-              }),
+              },
             ),
     );
   }
