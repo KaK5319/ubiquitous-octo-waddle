@@ -78,6 +78,9 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   final GlobalKey<PageFlipWidgetState> _controller = GlobalKey<PageFlipWidgetState>();
   bool _isLoading = true;
   int _pageCount = 0;
+  
+  // キャッシュ保持用
+  final Map<int, ImageProvider> _imageCache = {};
 
   @override
   void initState() {
@@ -88,10 +91,17 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   Future<void> _initPdf() async {
     try {
       final doc = await PdfDocument.openFile(widget.filePath);
+      _pdfDocument = doc;
+      _pageCount = doc.pagesCount;
+
+      // 初期起動時に最初の8ページを一括爆速ロード
+      final initialLoadCount = _pageCount < 8 ? _pageCount : 8;
+      await Future.wait(
+        List.generate(initialLoadCount, (i) => _preloadPage(i + 1)),
+      );
+
       if (mounted) {
         setState(() {
-          _pdfDocument = doc;
-          _pageCount = doc.pagesCount;
           _isLoading = false;
         });
       }
@@ -102,6 +112,32 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
         });
       }
     }
+  }
+
+  // レンダリング倍率を最適化して爆速プリロード
+  Future<ImageProvider?> _preloadPage(int pageNumber) async {
+    if (_imageCache.containsKey(pageNumber)) {
+      return _imageCache[pageNumber];
+    }
+    if (_pdfDocument == null) return null;
+
+    try {
+      final page = await _pdfDocument!.getPage(pageNumber);
+      // 1.2倍率に抑えてレンダリング時間を半減＆軽量化
+      final pageImage = await page.render(
+        width: page.width * 1.2,
+        height: page.height * 1.2,
+        format: PdfPageImageFormat.jpeg,
+      );
+      await page.close();
+
+      if (pageImage != null) {
+        final provider = MemoryImage(pageImage.bytes);
+        _imageCache[pageNumber] = provider;
+        return provider;
+      }
+    } catch (_) {}
+    return null;
   }
 
   @override
@@ -124,11 +160,22 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
           : PageFlipWidget(
               key: _controller,
               backgroundColor: Colors.black,
-              isRightSwipe: true, // 右から左へのスライド（漫画・和書向け）
+              isRightSwipe: false, // めくり方向を「逆向き」に反転（左→右で進む）
+              cutoff: 0.1,         // 超高感度（わずかなスワイプで捲れる）
+              duration: const Duration(milliseconds: 150), // 限界レベルの爆速アニメーション (150ms)
               children: List.generate(_pageCount, (index) {
-                return PdfPageImageWidget(
-                  document: _pdfDocument!,
-                  pageNumber: index + 1,
+                final pageNum = index + 1;
+                
+                // 前後5ページ分を裏で強力に自動プリロード
+                for (int i = 1; i <= 5; i++) {
+                  if (pageNum + i <= _pageCount) _preloadPage(pageNum + i);
+                  if (pageNum - i >= 1) _preloadPage(pageNum - i);
+                }
+
+                return PdfPageCachedWidget(
+                  pageNumber: pageNum,
+                  imageCache: _imageCache,
+                  loadTask: () => _preloadPage(pageNum),
                 );
               }),
             ),
@@ -136,42 +183,43 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   }
 }
 
-class PdfPageImageWidget extends StatefulWidget {
-  final PdfDocument document;
+class PdfPageCachedWidget extends StatefulWidget {
   final int pageNumber;
+  final Map<int, ImageProvider> imageCache;
+  final Future<ImageProvider?> Function() loadTask;
 
-  const PdfPageImageWidget({
+  const PdfPageCachedWidget({
     super.key,
-    required this.document,
     required this.pageNumber,
+    required this.imageCache,
+    required this.loadTask,
   });
 
   @override
-  State<PdfPageImageWidget> createState() => _PdfPageImageWidgetState();
+  State<PdfPageCachedWidget> createState() => _PdfPageCachedWidgetState();
 }
 
-class _PdfPageImageWidgetState extends State<PdfPageImageWidget> {
-  MemoryImage? _image;
+class _PdfPageCachedWidgetState extends State<PdfPageCachedWidget> {
+  ImageProvider? _image;
 
   @override
   void initState() {
     super.initState();
-    _loadPage();
+    _loadImage();
   }
 
-  Future<void> _loadPage() async {
-    final page = await widget.document.getPage(widget.pageNumber);
-    final pageImage = await page.render(
-      width: page.width * 1.5,
-      height: page.height * 1.5,
-      format: PdfPageImageFormat.jpeg,
-    );
-    await page.close();
-
-    if (pageImage != null && mounted) {
+  Future<void> _loadImage() async {
+    if (widget.imageCache.containsKey(widget.pageNumber)) {
       setState(() {
-        _image = MemoryImage(pageImage.bytes);
+        _image = widget.imageCache[widget.pageNumber];
       });
+    } else {
+      final img = await widget.loadTask();
+      if (mounted) {
+        setState(() {
+          _image = img;
+        });
+      }
     }
   }
 
