@@ -76,10 +76,10 @@ class PdfViewerScreen extends StatefulWidget {
 
 class _PdfViewerScreenState extends State<PdfViewerScreen> {
   PdfDocument? _pdfDocument;
-  PageController _pageController = PageController();
+  final PageController _pageController = PageController();
   bool _isLoading = true;
   int _pageCount = 0;
-  bool _isRightToLeft = true; // デフォルト：右開き（右→左へめくる）
+  bool _isRightToLeft = true; // デフォルト：右開き
   
   final Map<int, ImageProvider> _imageCache = {};
   bool _isRendering = false;
@@ -183,7 +183,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
             )
           : PageView.builder(
               controller: _pageController,
-              reverse: _isRightToLeft, // めくり方向の逆転対応
+              reverse: _isRightToLeft,
               itemCount: _pageCount,
               itemBuilder: (context, index) {
                 final pageNum = index + 1;
@@ -196,15 +196,45 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                       position = (_pageController.page ?? 0.0) - index;
                     }
                     
-                    // 限界爆速の立体カールドロップエフェクト
+                    // 90度（半開き）を超えたら背面（裏側）を描画しない保護
+                    final isBackFace = position.abs() > 0.5;
+                    
+                    // カール計算と回転角度
+                    final angle = position * (pi / 2.5);
                     final matrix = Matrix4.identity()
-                      ..setEntry(3, 2, 0.001)
-                      ..rotateY(position * (pi / 3));
+                      ..setEntry(3, 2, 0.0012)
+                      ..rotateY(angle);
+
+                    // ページ接合部のリアルな影（グラデーション）
+                    final shadowOpacity = (position.abs()).clamp(0.0, 0.6);
 
                     return Transform(
                       transform: matrix,
                       alignment: position > 0 ? Alignment.centerLeft : Alignment.centerRight,
-                      child: child,
+                      child: Stack(
+                        children: [
+                          // 90度以上回った時は白地（紙の裏面）で隠す
+                          if (isBackFace)
+                            Container(color: Colors.white)
+                          else
+                            child!,
+                          // めくり部分の陰影
+                          Positioned.fill(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    Colors.black.withOpacity(shadowOpacity),
+                                    Colors.transparent,
+                                  ],
+                                  begin: position > 0 ? Alignment.centerLeft : Alignment.centerRight,
+                                  end: position > 0 ? Alignment.centerRight : Alignment.centerLeft,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     );
                   },
                   child: PdfPageWidget(
