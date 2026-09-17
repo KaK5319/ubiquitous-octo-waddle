@@ -151,17 +151,16 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     return null;
   }
 
-  // めくりスピードを高速化（100ms）＆サクサク動くイージングに変更
   void _nextPage() {
     _pageController.nextPage(
-      duration: const Duration(milliseconds: 100),
+      duration: const Duration(milliseconds: 120),
       curve: Curves.easeOut,
     );
   }
 
   void _previousPage() {
     _pageController.previousPage(
-      duration: const Duration(milliseconds: 100),
+      duration: const Duration(milliseconds: 120),
       curve: Curves.easeOut,
     );
   }
@@ -196,7 +195,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
               },
               child: PageView.builder(
                 controller: _pageController,
-                reverse: true, // 右開き設定
+                reverse: true, // 右開き（1ページ目が右端スタート）
                 itemCount: _pageCount,
                 itemBuilder: (context, index) {
                   final pageNum = index + 1;
@@ -209,25 +208,24 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                         pageOffset = (_pageController.page ?? 0.0) - index;
                       }
 
-                      // ページが重なって見える現象を防止（自分のページ位置のみ回転を適応）
                       final normalizedOffset = pageOffset.clamp(-1.0, 1.0);
-                      
-                      // 爆速かつ軽快なめくり角度計算
+
+                      // 右開き（reverse: true）における正しいめくり角度計算
+                      // プラス角度にすることで「右端の背表紙を軸に右方向（→）へめくれる」動作になります
                       final angle = normalizedOffset * (pi / 2.0);
 
                       final matrix = Matrix4.identity()
-                        ..setEntry(3, 2, 0.0005) // パースペクティブ強度を軽量化調整
-                        ..rotateY(-angle);       // 右端軸で右（→）へ爽快に回転
+                        ..setEntry(3, 2, 0.0005)
+                        ..rotateY(angle); // 符号をプラスにして右めくりへ正しく変換
 
                       final shadowOpacity = (normalizedOffset.abs() * 0.3).clamp(0.0, 0.3);
 
                       return Transform(
                         transform: matrix,
-                        alignment: Alignment.centerRight, // 右端（背表紙）に軸を固定
+                        alignment: Alignment.centerRight, // 軸を「右端（背表紙）」に固定
                         child: Stack(
                           children: [
                             child!,
-                            // 影の描画も軽量化
                             if (normalizedOffset != 0)
                               Positioned.fill(
                                 child: Container(
