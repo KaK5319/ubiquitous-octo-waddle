@@ -79,7 +79,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   final PageController _pageController = PageController();
   bool _isLoading = true;
   int _pageCount = 0;
-  
+
   final Map<int, ImageProvider> _imageCache = {};
   bool _isRendering = false;
 
@@ -151,17 +151,18 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     return null;
   }
 
+  // めくりスピードを高速化（100ms）＆サクサク動くイージングに変更
   void _nextPage() {
     _pageController.nextPage(
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOutCubic,
+      duration: const Duration(milliseconds: 100),
+      curve: Curves.easeOut,
     );
   }
 
   void _previousPage() {
     _pageController.previousPage(
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOutCubic,
+      duration: const Duration(milliseconds: 100),
+      curve: Curves.easeOut,
     );
   }
 
@@ -184,7 +185,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
               child: CircularProgressIndicator(color: Colors.white),
             )
           : GestureDetector(
-              // 右開きタップ領域: 左側タップで進む（→）、右側で戻る（←）
+              // タップ領域判定（右開き: 画面左側タップで次のページへ）
               onTapUp: (details) {
                 final width = MediaQuery.of(context).size.width;
                 if (details.globalPosition.dx < width * 0.4) {
@@ -195,7 +196,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
               },
               child: PageView.builder(
                 controller: _pageController,
-                reverse: false, // 回転変形処理とバッティングしないよう内側で制御
+                reverse: true, // 右開き設定
                 itemCount: _pageCount,
                 itemBuilder: (context, index) {
                   final pageNum = index + 1;
@@ -208,35 +209,29 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                         pageOffset = (_pageController.page ?? 0.0) - index;
                       }
 
-                      // ページ移動計算 (右開き: 次のページへ進むほど右(→)へ倒れる)
-                      // pageOffset > 0: 現在のページが右へめくられていく動き
-                      final angle = (pageOffset * (pi / 2.0)).clamp(0.0, pi / 2.0);
+                      // ページが重なって見える現象を防止（自分のページ位置のみ回転を適応）
+                      final normalizedOffset = pageOffset.clamp(-1.0, 1.0);
+                      
+                      // 爆速かつ軽快なめくり角度計算
+                      final angle = normalizedOffset * (pi / 2.0);
 
                       final matrix = Matrix4.identity()
-                        ..setEntry(3, 2, 0.001) // 3D奥行き感のパースペクティブ
-                        ..rotateY(-angle);     // 右端軸で右方向（→）へひっくり返す
+                        ..setEntry(3, 2, 0.0005) // パースペクティブ強度を軽量化調整
+                        ..rotateY(-angle);       // 右端軸で右（→）へ爽快に回転
 
-                      final shadowOpacity = (pageOffset * 0.5).clamp(0.0, 0.5);
+                      final shadowOpacity = (normalizedOffset.abs() * 0.3).clamp(0.0, 0.3);
 
                       return Transform(
                         transform: matrix,
-                        alignment: Alignment.centerRight, // 軸を「右端（背表紙）」に完全に固定
+                        alignment: Alignment.centerRight, // 右端（背表紙）に軸を固定
                         child: Stack(
                           children: [
                             child!,
-                            if (pageOffset > 0)
+                            // 影の描画も軽量化
+                            if (normalizedOffset != 0)
                               Positioned.fill(
                                 child: Container(
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        Colors.black.withOpacity(shadowOpacity),
-                                        Colors.transparent,
-                                      ],
-                                      begin: Alignment.centerLeft,
-                                      end: Alignment.centerRight,
-                                    ),
-                                  ),
+                                  color: Colors.black.withOpacity(shadowOpacity),
                                 ),
                               ),
                           ],
