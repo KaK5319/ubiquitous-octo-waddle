@@ -1,10 +1,9 @@
-import 'dart:math';
+import 'dartd:async';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdfx/pdfx.dart';
 
 void main() {
-  WidgetsFlutterBinding.ensureInitialized();
   runApp(const MyApp());
 }
 
@@ -14,38 +13,35 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'SideBooks Clone',
+      title: 'PDF Manga Reader',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
-      home: const BookshelfScreen(),
+      theme: ThemeData.dark(),
+      home: const HomeScreen(),
     );
   }
 }
 
-class BookshelfScreen extends StatefulWidget {
-  const BookshelfScreen({super.key});
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
 
   @override
-  State<BookshelfScreen> createState() => _BookshelfScreenState();
+  State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _BookshelfScreenState extends State<BookshelfScreen> {
-  Future<void> _pickPDF() async {
+class _HomeScreenState extends State<HomeScreen> {
+  Future<void> _pickPdf() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf'],
     );
 
     if (result != null && result.files.single.path != null) {
-      if (!mounted) return;
       final path = result.files.single.path!;
+      if (!mounted) return;
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => PdfViewerScreen(filePath: path),
+          builder: (context) => MangaReaderScreen(pdfPath: path),
         ),
       );
     }
@@ -57,8 +53,8 @@ class _BookshelfScreenState extends State<BookshelfScreen> {
       appBar: AppBar(title: const Text('本棚')),
       body: Center(
         child: ElevatedButton.icon(
-          onPressed: _pickPDF,
-          icon: const Icon(Icons.folder_open),
+          onPressed: _pickPdf,
+          icon: const Icon(Icons.picture_as_pdf),
           label: const Text('PDFファイルを開く'),
         ),
       ),
@@ -66,109 +62,69 @@ class _BookshelfScreenState extends State<BookshelfScreen> {
   }
 }
 
-class PdfViewerScreen extends StatefulWidget {
-  final String filePath;
-  const PdfViewerScreen({super.key, required this.filePath});
+class MangaReaderScreen extends StatefulWidget {
+  final String pdfPath;
+  const MangaReaderScreen({super.key, required this.pdfPath});
 
   @override
-  State<PdfViewerScreen> createState() => _PdfViewerScreenState();
+  State<MangaReaderScreen> createState() => _MangaReaderScreenState();
 }
 
-class _PdfViewerScreenState extends State<PdfViewerScreen> {
+class _MangaReaderScreenState extends State<MangaReaderScreen> {
+  late PdfDocumentProvider _pdfProvider;
   PdfDocument? _pdfDocument;
-  final PageController _pageController = PageController();
-  bool _isLoading = true;
-  int _pageCount = 0;
+  late PageController _pageController;
 
-  final Map<int, ImageProvider> _imageCache = {};
-  bool _isRendering = false;
+  int _totalPages = 0;
+  int _currentPage = 0;
+  final Map<int, PdfPageImage> _imageCache = {};
 
   @override
   void initState() {
     super.initState();
+    _pageController = PageController();
     _initPdf();
   }
 
   Future<void> _initPdf() async {
-    try {
-      final doc = await PdfDocument.openFile(widget.filePath);
+    _pdfProvider = PdfDocumentProvider.openFile(widget.pdfPath);
+    final doc = await _pdfProvider.openDocument();
+    setState(() {
       _pdfDocument = doc;
-      _pageCount = doc.pagesCount;
+      _totalPages = doc.pagesCount;
+    });
+    _preloadImages(0);
+  }
 
-      await _loadSinglePage(1);
-      if (_pageCount >= 2) await _loadSinglePage(2);
-
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+  Future<void> _preloadImages(int centerIndex) async {
+    if (_pdfDocument == null) return;
+    for (int i = centerIndex - 2; i <= centerIndex + 2; i++) {
+      if (i >= 0 && i < _totalPages && !_imageCache.containsKey(i)) {
+        _renderPage(i);
       }
     }
   }
 
-  Future<ImageProvider?> _loadSinglePage(int pageNumber) async {
-    if (_imageCache.containsKey(pageNumber)) {
-      return _imageCache[pageNumber];
-    }
-
-    while (_isRendering) {
-      await Future.delayed(const Duration(milliseconds: 10));
-    }
-
-    if (_imageCache.containsKey(pageNumber)) {
-      return _imageCache[pageNumber];
-    }
-
-    final doc = _pdfDocument;
-    if (doc == null) return null;
-
-    _isRendering = true;
-
-    try {
-      final page = await doc.getPage(pageNumber);
-      final pageImage = await page.render(
-        width: page.width * 1.2,
-        height: page.height * 1.2,
-        format: PdfPageImageFormat.jpeg,
-      );
-      await page.close();
-
-      if (pageImage != null) {
-        final provider = MemoryImage(pageImage.bytes);
-        _imageCache[pageNumber] = provider;
-        _isRendering = false;
-        return provider;
-      }
-    } catch (_) {}
-
-    _isRendering = false;
-    return null;
-  }
-
-  void _nextPage() {
-    _pageController.nextPage(
-      duration: const Duration(milliseconds: 120),
-      curve: Curves.easeOut,
+  Future<void> _renderPage(int pageIndex) async {
+    if (_pdfDocument == null || _imageCache.containsKey(pageIndex)) return;
+    final page = await _pdfDocument!.getPage(pageIndex + 1);
+    final pageImage = await page.render(
+      width: page.width * 2,
+      height: page.height * 2,
+      format: PdfPageImageFormat.jpeg,
     );
-  }
-
-  void _previousPage() {
-    _pageController.previousPage(
-      duration: const Duration(milliseconds: 120),
-      curve: Curves.easeOut,
-    );
+    await page.close();
+    if (pageImage != null && mounted) {
+      setState(() {
+        _imageCache[pageIndex] = pageImage;
+      });
+    }
   }
 
   @override
   void dispose() {
-    _pdfDocument?.close();
     _pageController.dispose();
+    _pdfDocument?.close();
     super.dispose();
   }
 
@@ -177,148 +133,54 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text(_pageCount > 0 ? '全 $_pageCount ページ' : '読み込み中...'),
+        title: Text('全 $_totalPages ページ'),
+        backgroundColor: Colors.black,
       ),
-      body: _isLoading || _pdfDocument == null
-          ? const Center(
-              child: CircularProgressIndicator(color: Colors.white),
-            )
-          : GestureDetector(
-              // タップ領域判定（右開き: 画面左側タップで次のページへ）
-              onTapUp: (details) {
-                final width = MediaQuery.of(context).size.width;
-                if (details.globalPosition.dx < width * 0.4) {
-                  _nextPage();
-                } else if (details.globalPosition.dx > width * 0.6) {
-                  _previousPage();
-                }
+      body: _pdfDocument == null
+          ? const Center(child: CircularProgressIndicator())
+          : PageView.builder(
+              reverse: true, // 右開き（右から左へめくる）
+              controller: _pageController,
+              itemCount: _totalPages,
+              onPageChanged: (index) {
+                setState(() {
+                  _currentPage = index;
+                });
+                _preloadImages(index);
               },
-              child: PageView.builder(
-                controller: _pageController,
-                reverse: true, // 右開き（1ページ目が右端スタート）
-                itemCount: _pageCount,
-                itemBuilder: (context, index) {
-                  final pageNum = index + 1;
+              itemBuilder: (context, index) {
+                return AnimatedBuilder(
+                  animation: _pageController,
+                  builder: (context, child) {
+                    double value = 0.0;
+                    if (_pageController.position.haveDimensions) {
+                      value = (_pageController.page ?? 0) - index;
+                    }
+                    final angle = value * 0.4;
 
-                  return AnimatedBuilder(
-                    animation: _pageController,
-                    builder: (context, child) {
-                      double pageOffset = 0.0;
-                      if (_pageController.position.haveDimensions) {
-                        pageOffset = (_pageController.page ?? 0.0) - index;
-                      }
-
-                      final normalizedOffset = pageOffset.clamp(-1.0, 1.0);
-
-                      // 右開き（reverse: true）における正しいめくり角度計算
-                      // プラス角度にすることで「右端の背表紙を軸に右方向（→）へめくれる」動作になります
-                      final angle = normalizedOffset * (pi / 2.0);
-
-                      final matrix = Matrix4.identity()
-                        ..setEntry(3, 2, 0.0005)
-                        ..rotateY(angle); // 符号をプラスにして右めくりへ正しく変換
-
-                      final shadowOpacity = (normalizedOffset.abs() * 0.3).clamp(0.0, 0.3);
-
-                      return Transform(
-                        transform: matrix,
-                        alignment: Alignment.centerRight, // 軸を「右端（背表紙）」に固定
-                        child: Stack(
-                          children: [
-                            child!,
-                            if (normalizedOffset != 0)
-                              Positioned.fill(
-                                child: Container(
-                                  color: Colors.black.withOpacity(shadowOpacity),
-                                ),
-                              ),
-                          ],
-                        ),
-                      );
-                    },
-                    child: PdfPageWidget(
-                      pageNumber: pageNum,
-                      imageCache: _imageCache,
-                      loadPage: () => _loadSinglePage(pageNum),
-                      preloadNeighbors: () {
-                        if (pageNum + 1 <= _pageCount) _loadSinglePage(pageNum + 1);
-                        if (pageNum - 1 >= 1) _loadSinglePage(pageNum - 1);
-                      },
-                    ),
-                  );
-                },
-              ),
+                    return Transform(
+                      transform: Matrix4.identity()
+                        ..setEntry(3, 2, 0.001)
+                        ..rotateY(angle),
+                      alignment: value > 0
+                          ? Alignment.centerRight
+                          : Alignment.centerLeft,
+                      child: child,
+                    );
+                  },
+                  child: _buildPageContent(index),
+                );
+              },
             ),
     );
   }
-}
 
-class PdfPageWidget extends StatefulWidget {
-  final int pageNumber;
-  final Map<int, ImageProvider> imageCache;
-  final Future<ImageProvider?> Function() loadPage;
-  final VoidCallback preloadNeighbors;
-
-  const PdfPageWidget({
-    super.key,
-    required this.pageNumber,
-    required this.imageCache,
-    required this.loadPage,
-    required this.preloadNeighbors,
-  });
-
-  @override
-  State<PdfPageWidget> createState() => _PdfPageWidgetState();
-}
-
-class _PdfPageWidgetState extends State<PdfPageWidget> {
-  ImageProvider? _image;
-
-  @override
-  void initState() {
-    super.initState();
-    _fetchPage();
-  }
-
-  Future<void> _fetchPage() async {
-    if (widget.imageCache.containsKey(widget.pageNumber)) {
-      if (mounted) {
-        setState(() {
-          _image = widget.imageCache[widget.pageNumber];
-        });
-        widget.preloadNeighbors();
-      }
-      return;
+  Widget _buildPageContent(int index) {
+    final cachedImage = _imageCache[index];
+    if (cachedImage != null) {
+      return Image.memory(cachedImage.bytes, fit: BoxFit.contain);
     }
-
-    final img = await widget.loadPage();
-    if (mounted && img != null) {
-      setState(() {
-        _image = img;
-      });
-      widget.preloadNeighbors();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final img = _image ?? widget.imageCache[widget.pageNumber];
-
-    if (img == null) {
-      return Container(
-        color: Colors.white,
-        child: const Center(
-          child: CircularProgressIndicator(color: Colors.grey),
-        ),
-      );
-    }
-
-    return Container(
-      color: Colors.white,
-      child: Image(
-        image: img,
-        fit: BoxFit.contain,
-      ),
-    );
+    _renderPage(index);
+    return const Center(child: CircularProgressIndicator());
   }
 }
