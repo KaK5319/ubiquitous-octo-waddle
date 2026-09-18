@@ -1,9 +1,4 @@
-import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter_pdfview/flutter_pdfview.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:http/http.dart' as http;
 
 void main() {
   runApp(const SideBooksApp());
@@ -18,55 +13,22 @@ class SideBooksApp extends StatelessWidget {
       title: 'SideBooks Style Reader',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(),
-      home: const PdfReaderScreen(),
+      home: const MangaReaderScreen(),
     );
   }
 }
 
-class PdfReaderScreen extends StatefulWidget {
-  const PdfReaderScreen({Key? key}) : super(key: key);
+class MangaReaderScreen extends StatefulWidget {
+  const MangaReaderScreen({Key? key}) : super(key: key);
 
   @override
-  State<PdfReaderScreen> createState() => _PdfReaderScreenState();
+  State<MangaReaderScreen> createState() => _MangaReaderScreenState();
 }
 
-class _PdfReaderScreenState extends State<PdfReaderScreen> {
-  String? localPath;
-  bool isLoading = true;
-  int totalPages = 0;
+class _MangaReaderScreenState extends State<MangaReaderScreen> {
+  final PageController _pageController = PageController();
+  final int totalPages = 10; // デモ用ページ数
   int currentPage = 0;
-  PDFViewController? pdfViewController;
-
-  final String samplePdfUrl =
-      'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/examples/learning/helloworld.pdf';
-
-  @override
-  void initState() {
-    super.initState();
-    _loadPdf();
-  }
-
-  Future<void> _loadPdf() async {
-    try {
-      final response = await http.get(Uri.parse(samplePdfUrl));
-      final dir = await getApplicationDocumentsDirectory();
-      final file = File('${dir.path}/sample.pdf');
-      await file.writeAsBytes(response.bodyBytes, flush: true);
-
-      if (mounted) {
-        setState(() {
-          localPath = file.path;
-          isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          isLoading = false;
-        });
-      }
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -75,48 +37,37 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
       appBar: AppBar(
         backgroundColor: Colors.black.withOpacity(0.8),
         title: Text(
-          totalPages > 0 ? '${currentPage + 1} / $totalPages' : 'PDF Reader',
+          '${currentPage + 1} / $totalPages',
           style: const TextStyle(fontSize: 16),
         ),
         centerTitle: true,
       ),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : localPath == null
-              ? const Center(
+      body: Directionality(
+        textDirection: TextDirection.rtl, // 右開き（マンガ仕様）
+        child: PageView.builder(
+          controller: _pageController,
+          itemCount: totalPages,
+          onPageChanged: (int index) {
+            setState(() {
+              currentPage = index;
+            });
+          },
+          itemBuilder: (context, index) {
+            return Center(
+              child: Container(
+                margin: const EdgeInsets.all(16),
+                color: Colors.grey[900],
+                child: Center(
                   child: Text(
-                    'PDFの読み込みに失敗しました。',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                )
-              : Directionality(
-                  textDirection: TextDirection.rtl,
-                  child: PDFView(
-                    filePath: localPath,
-                    enableSwipe: true,
-                    swipeHorizontal: true,
-                    autoSpacing: false,
-                    pageFling: true,
-                    pageSnap: true,
-                    defaultPage: 0,
-                    fitPolicy: FitPolicy.BOTH,
-                    onRender: (pages) {
-                      setState(() {
-                        totalPages = pages ?? 0;
-                      });
-                    },
-                    onViewCreated: (PDFViewController controller) {
-                      pdfViewController = controller;
-                    },
-                    onPageChanged: (int? page, int? total) {
-                      if (page != null) {
-                        setState(() {
-                          currentPage = page;
-                        });
-                      }
-                    },
+                    '${index + 1} ページ目',
+                    style: const TextStyle(fontSize: 24, color: Colors.white),
                   ),
                 ),
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 }
