@@ -26,16 +26,9 @@ class MangaReaderScreen extends StatefulWidget {
 }
 
 class _MangaReaderScreenState extends State<MangaReaderScreen> {
-  late PageController _pageController;
+  final PageController _pageController = PageController();
   final int totalPages = 10;
   int currentPage = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    // 初期ページを末尾インデックスに指定（1ページ目を画面に表示）
-    _pageController = PageController(initialPage: totalPages - 1);
-  }
 
   @override
   void dispose() {
@@ -55,31 +48,34 @@ class _MangaReaderScreenState extends State<MangaReaderScreen> {
         ),
         centerTitle: true,
       ),
-      body: PageView.builder(
-        controller: _pageController,
-        itemCount: totalPages,
-        onPageChanged: (int index) {
-          setState(() {
-            // インデックス反転（右開き制御）
-            currentPage = (totalPages - 1) - index;
-          });
-        },
-        itemBuilder: (context, index) {
-          // ページ内容の反転設定
-          final displayPageIndex = (totalPages - 1) - index;
-          return Center(
-            child: Container(
-              margin: const EdgeInsets.all(16),
-              color: Colors.grey[900],
+      body: Directionality(
+        textDirection: TextDirection.rtl, // 右開きスワイプ方向（←へめくると進む）
+        child: PageView.builder(
+          controller: _pageController,
+          itemCount: totalPages,
+          onPageChanged: (int index) {
+            setState(() {
+              currentPage = index;
+            });
+          },
+          itemBuilder: (context, index) {
+            return Directionality(
+              textDirection: TextDirection.ltr, // コンテンツの文字・表示方向は標準（左から右）に復元
               child: Center(
-                child: Text(
-                  '${displayPageIndex + 1} ページ目',
-                  style: const TextStyle(fontSize: 24, color: Colors.white),
+                child: Container(
+                  margin: const EdgeInsets.all(16),
+                  color: Colors.grey[900],
+                  child: Center(
+                    child: Text(
+                      '${index + 1} ページ目',
+                      style: const TextStyle(fontSize: 24, color: Colors.white),
+                    ),
+                  ),
                 ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
