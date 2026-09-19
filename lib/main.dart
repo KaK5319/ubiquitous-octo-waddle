@@ -26,9 +26,22 @@ class MangaReaderScreen extends StatefulWidget {
 }
 
 class _MangaReaderScreenState extends State<MangaReaderScreen> {
-  final PageController _pageController = PageController();
-  final int totalPages = 10; // デモ用ページ数
+  late PageController _pageController;
+  final int totalPages = 10;
   int currentPage = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // 右開き用に初期ページを最後のインデックスに設定（インデックスを反転させて制御）
+    _pageController = PageController(initialPage: 0);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +56,7 @@ class _MangaReaderScreenState extends State<MangaReaderScreen> {
         centerTitle: true,
       ),
       body: Directionality(
-        textDirection: TextDirection.rtl, // 右開き（マンガ仕様）
+        textDirection: TextDirection.rtl, // 右開き（左スワイプで進む）設定
         child: PageView.builder(
           controller: _pageController,
           itemCount: totalPages,
@@ -53,14 +66,17 @@ class _MangaReaderScreenState extends State<MangaReaderScreen> {
             });
           },
           itemBuilder: (context, index) {
-            return Center(
-              child: Container(
-                margin: const EdgeInsets.all(16),
-                color: Colors.grey[900],
-                child: Center(
-                  child: Text(
-                    '${index + 1} ページ目',
-                    style: const TextStyle(fontSize: 24, color: Colors.white),
+            return Directionality(
+              textDirection: TextDirection.ltr, // コンテンツ（テキスト・画像）の向きを正常に戻す
+              child: Center(
+                child: Container(
+                  margin: const EdgeInsets.all(16),
+                  color: Colors.grey[900],
+                  child: Center(
+                    child: Text(
+                      '${index + 1} ページ目',
+                      style: const TextStyle(fontSize: 24, color: Colors.white),
+                    ),
                   ),
                 ),
               ),
