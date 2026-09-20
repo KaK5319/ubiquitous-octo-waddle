@@ -37,7 +37,6 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   PDFViewController? pdfViewController;
   bool _isPageChanging = false;
 
-  // 複数ページ（全10ページ前後）のサンプルPDF
   final String samplePdfUrl =
       'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf';
 
@@ -121,16 +120,14 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
               : GestureDetector(
                   behavior: HitTestBehavior.translucent,
                   onTapUp: (details) {
-                    // 【右開き設定（マンガ等）】
-                    // 画面左側タップで「次へ」、右側タップで「前へ」
-                    if (details.globalPosition.dx < screenWidth / 2) {
+                    // 画面右側タップで「次へ」、左側タップで「前へ」
+                    if (details.globalPosition.dx > screenWidth / 2) {
                       _nextPage();
                     } else {
                       _previousPage();
                     }
                   },
                   onHorizontalDragEnd: (details) {
-                    // 【右開き設定（マンガ等）】
                     // 左スワイプ（←）で「次へ」、右スワイプ（→）で「前へ」
                     if (details.primaryVelocity! < -100) {
                       _nextPage();
@@ -140,7 +137,7 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
                   },
                   child: PDFView(
                     filePath: localPath,
-                    enableSwipe: false, // 標準スワイプを無効化して自前のGestureDetectorを優先
+                    enableSwipe: false,
                     swipeHorizontal: true,
                     autoSpacing: false,
                     pageFling: false,
