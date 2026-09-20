@@ -94,8 +94,8 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
     if (pageIndex >= 0 && pageIndex < _totalPages) {
       _pageController.animateToPage(
         pageIndex,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
       );
     }
   }
@@ -161,7 +161,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
     final screenWidth = MediaQuery.of(context).size.width;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF111111),
+      backgroundColor: Colors.black,
       body: _isLoading
           ? const Center(
               child: Column(
@@ -177,7 +177,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
               ? const Center(child: Text('PDFの読み込みに失敗しました。'))
               : Stack(
                   children: [
-                    // 1. 本風の立体スライドエフェクト付き PageView
+                    // 1. メイン画面（PageView）
                     PageView.builder(
                       controller: _pageController,
                       reverse: _isRightSwipe,
@@ -191,65 +191,42 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                         final image = _pageImages[index];
                         if (image == null) return const SizedBox.shrink();
 
-                        return AnimatedBuilder(
-                          animation: _pageController,
-                          builder: (context, child) {
-                            double value = 0.0;
-                            if (_pageController.position.haveDimensions) {
-                              value = index - (_pageController.page ?? 0);
-                            } else {
-                              value = (index - _currentPage).toDouble();
+                        return GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onTapUp: (details) {
+                            final touchX = details.globalPosition.dx;
+                            final leftZone = screenWidth * 0.3;
+                            final rightZone = screenWidth * 0.7;
+
+                            // 画面中央タップ：UIの表示/非表示を切り替え
+                            if (touchX >= leftZone && touchX <= rightZone) {
+                              setState(() {
+                                _showUI = !_showUI;
+                              });
+                              return;
                             }
 
-                            // 本をめくるような立体感（重なりと影）のエフェクト処理
-                            final isLeaving = value < 0;
-                            final factor = value.abs().clamp(0.0, 1.0);
-
-                            return Transform.translate(
-                              offset: Offset(isLeaving ? value * screenWidth * 0.3 : 0, 0),
-                              child: Opacity(
-                                opacity: (1.0 - (factor * 0.3)).clamp(0.0, 1.0),
-                                child: child,
-                              ),
-                            );
-                          },
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.translucent,
-                            onTapUp: (details) {
-                              final touchX = details.globalPosition.dx;
-                              final leftZone = screenWidth * 0.3;
-                              final rightZone = screenWidth * 0.7;
-
-                              // 画面中央タップで上下バーを表示/非表示
-                              if (touchX >= leftZone && touchX <= rightZone) {
-                                setState(() {
-                                  _showUI = !_showUI;
-                                });
-                                return;
-                              }
-
-                              // 画面両端タップでページめくり
-                              if (_isRightSwipe) {
-                                if (touchX < leftZone) {
-                                  _nextPage();
-                                } else {
-                                  _previousPage();
-                                }
+                            // 画面端タップ：ページ送り
+                            if (_isRightSwipe) {
+                              if (touchX < leftZone) {
+                                _nextPage();
                               } else {
-                                if (touchX > rightZone) {
-                                  _nextPage();
-                                } else {
-                                  _previousPage();
-                                }
+                                _previousPage();
                               }
-                            },
-                            child: Container(
-                              color: Colors.white,
-                              child: Center(
-                                child: Image.memory(
-                                  image.bytes,
-                                  fit: BoxFit.contain,
-                                ),
+                            } else {
+                              if (touchX > rightZone) {
+                                _nextPage();
+                              } else {
+                                _previousPage();
+                              }
+                            }
+                          },
+                          child: Container(
+                            color: Colors.white,
+                            child: Center(
+                              child: Image.memory(
+                                image.bytes,
+                                fit: BoxFit.contain,
                               ),
                             ),
                           ),
@@ -257,7 +234,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                       },
                     ),
 
-                    // 2. 上部アプリバー
+                    // 2. 上部ツールバー
                     AnimatedPositioned(
                       duration: const Duration(milliseconds: 200),
                       top: _showUI ? 0 : -100,
@@ -321,7 +298,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                       ),
                     ),
 
-                    // 3. 下部シークバー（数字非表示）
+                    // 3. 下部シークバー
                     AnimatedPositioned(
                       duration: const Duration(milliseconds: 200),
                       bottom: _showUI ? 0 : -100,
