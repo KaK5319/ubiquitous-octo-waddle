@@ -105,40 +105,37 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
                   behavior: HitTestBehavior.translucent,
                   onHorizontalDragEnd: (details) {
                     if (details.primaryVelocity! < 0) {
-                      // 左スワイプ（←）: 次のページへ進む
+                      // 左スワイプ（←）: 次のページに進む（マンガ仕様）
                       _nextPage();
                     } else if (details.primaryVelocity! > 0) {
-                      // 右スワイプ（→）: 前のページへ戻る
+                      // 右スワイプ（→）: 前のページに戻る
                       _previousPage();
                     }
                   },
-                  child: Directionality(
-                    textDirection: TextDirection.rtl,
-                    child: PDFView(
-                      filePath: localPath,
-                      enableSwipe: true,
-                      swipeHorizontal: true,
-                      autoSpacing: false,
-                      pageFling: true,
-                      pageSnap: true,
-                      defaultPage: 0,
-                      fitPolicy: FitPolicy.BOTH,
-                      onRender: (pages) {
+                  child: PDFView(
+                    filePath: localPath,
+                    enableSwipe: false, // ライブラリ側のスワイプをOFFにしてGestureDetectorで制御
+                    swipeHorizontal: true,
+                    autoSpacing: false,
+                    pageFling: true,
+                    pageSnap: true,
+                    defaultPage: 0,
+                    fitPolicy: FitPolicy.BOTH,
+                    onRender: (pages) {
+                      setState(() {
+                        totalPages = pages ?? 0;
+                      });
+                    },
+                    onViewCreated: (PDFViewController controller) {
+                      pdfViewController = controller;
+                    },
+                    onPageChanged: (int? page, int? total) {
+                      if (page != null) {
                         setState(() {
-                          totalPages = pages ?? 0;
+                          currentPage = page;
                         });
-                      },
-                      onViewCreated: (PDFViewController controller) {
-                        pdfViewController = controller;
-                      },
-                      onPageChanged: (int? page, int? total) {
-                        if (page != null) {
-                          setState(() {
-                            currentPage = page;
-                          });
-                        }
-                      },
-                    ),
+                      }
+                    },
                   ),
                 ),
     );
