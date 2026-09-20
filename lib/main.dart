@@ -36,10 +36,9 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
   List<PdfPageImage?> _pageImages = [];
   bool _isLoading = true;
   int _totalPages = 0;
-  int _currentPage = 0; // 現在のページインデックス (0ベース)
+  int _currentPage = 0;
 
-  // 設定用フラグ
-  bool _isRightSwipe = false; // true: 右開き（マンガ）, false: 左開き（書籍）[span_4](start_span)[span_4](end_span)[span_5](start_span)[span_5](end_span)[span_6](start_span)[span_6](end_span)
+  bool _isRightSwipe = false;
 
   final String _samplePdfUrl =
       'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf';
@@ -89,7 +88,6 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
     }
   }
 
-  /// 次のページに進む
   void _nextPage() {
     if (_currentPage < _totalPages - 1) {
       _controller.currentState?.nextPage();
@@ -99,7 +97,6 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
     }
   }
 
-  /// 前のページに戻る
   void _previousPage() {
     if (_currentPage > 0) {
       _controller.currentState?.previousPage();
@@ -109,7 +106,6 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
     }
   }
 
-  /// 指定ページへジャンプ
   void _goToPage(int pageIndex) {
     if (pageIndex >= 0 && pageIndex < _totalPages) {
       _controller.currentState?.goToPage(pageIndex);
@@ -119,7 +115,6 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
     }
   }
 
-  /// ページ番号直接入力ダイアログ
   void _showPageJumpDialog() {
     final textController = TextEditingController();
     showDialog(
@@ -219,79 +214,88 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
             )
           : _pageImages.isEmpty
               ? const Center(child: Text('PDFの読み込みに失敗しました。'))
-              : GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onTapUp: (details) {
-                    final touchPositionX = details.globalPosition.dx;
-
-                    if (_isRightSwipe) {
-                      if (touchPositionX < screenWidth / 2) {
-                        _nextPage();
-                      } else {
-                        _previousPage();
-                      }
-                    } else {
-                      if (touchPositionX > screenWidth / 2) {
-                        _nextPage();
-                      } else {
-                        _previousPage();
-                      }
-                    }
-                  },
-                  child: PageFlipWidget(
-                    key: _controller,
-                    backgroundColor: const Color(0xFF1A1A1A),
-                    isRightSwipe: _isRightSwipe,
-                    children: List.generate(_totalPages, (index) {
-                      final image = _pageImages[index];
-                      if (image == null) return const SizedBox.shrink();
-
-                      return Container(
-                        color: Colors.white,
-                        child: Center(
-                          child: Image.memory(
-                            image.bytes,
-                            fit: BoxFit.contain,
-                          ),
-                        ),
-                      );
-                    }),
-                  ),
-                ),
-      // 画面下部のスライダー（シークバー）バー
-      bottomNavigationBar: _isLoading || _totalPages <= 1
-          ? null
-          : Container(
-              color: Colors.black.withOpacity(0.8),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: SafeArea(
-                child: Row(
+              : Column(
                   children: [
-                    Text(
-                      '1',
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
-                    ),
                     Expanded(
-                      child: Slider(
-                        value: _currentPage.toDouble(),
-                        min: 0,
-                        max: (_totalPages - 1).toDouble(),
-                        divisions: _totalPages > 1 ? _totalPages - 1 : 1,
-                        activeColor: Colors.blueAccent,
-                        inactiveColor: Colors.white24,
-                        onChanged: (double value) {
-                          _goToPage(value.round());
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onTapUp: (details) {
+                          final touchPositionX = details.globalPosition.dx;
+                          if (_isRightSwipe) {
+                            if (touchPositionX < screenWidth / 2) {
+                              _nextPage();
+                            } else {
+                              _previousPage();
+                            }
+                          } else {
+                            if (touchPositionX > screenWidth / 2) {
+                              _nextPage();
+                            } else {
+                              _previousPage();
+                            }
+                          }
                         },
+                        child: PageFlipWidget(
+                          key: _controller,
+                          backgroundColor: const Color(0xFF1A1A1A),
+                          isRightSwipe: _isRightSwipe,
+                          children: List.generate(_totalPages, (index) {
+                            final image = _pageImages[index];
+                            if (image == null) return const SizedBox.shrink();
+
+                            return Container(
+                              color: Colors.white,
+                              child: Center(
+                                child: Image.memory(
+                                  image.bytes,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                            );
+                          }),
+                        ),
                       ),
                     ),
-                    Text(
-                      '$_totalPages',
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
-                    ),
+                    // 画面下部のシークバー
+                    if (_totalPages > 1)
+                      Container(
+                        color: Colors.black.withOpacity(0.8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        child: SafeArea(
+                          top: false,
+                          child: Row(
+                            children: [
+                              const Text(
+                                '1',
+                                style: TextStyle(
+                                    color: Colors.white70, fontSize: 12),
+                              ),
+                              Expanded(
+                                child: Slider(
+                                  value: _currentPage.toDouble(),
+                                  min: 0,
+                                  max: (_totalPages - 1).toDouble(),
+                                  divisions:
+                                      _totalPages > 1 ? _totalPages - 1 : 1,
+                                  activeColor: Colors.blueAccent,
+                                  inactiveColor: Colors.white24,
+                                  onChanged: (double value) {
+                                    _goToPage(value.round());
+                                  },
+                                ),
+                              ),
+                              Text(
+                                '$_totalPages',
+                                style: const TextStyle(
+                                    color: Colors.white70, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                   ],
                 ),
-              ),
-            ),
     );
   }
 }
