@@ -240,7 +240,6 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                           reverse: _isRightSwipe, // 右開き・左開きの切り替え
                           itemCount: _totalPages,
                           onPageChanged: (index) {
-                            // ページが変わるたびに上のテキストとスライダーを確実に更新
                             setState(() {
                               _currentPage = index;
                             });
@@ -262,7 +261,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                         ),
                       ),
                     ),
-                    // 画面下部のシークバー
+                    // 画面下部のシークバー（数字を削除してスライダーのみ配置）
                     if (_totalPages > 1)
                       Container(
                         color: Colors.black.withOpacity(0.8),
@@ -270,33 +269,16 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                             horizontal: 16, vertical: 8),
                         child: SafeArea(
                           top: false,
-                          child: Row(
-                            children: [
-                              const Text(
-                                '1',
-                                style: TextStyle(
-                                    color: Colors.white70, fontSize: 12),
-                              ),
-                              Expanded(
-                                child: Slider(
-                                  value: _currentPage.toDouble(),
-                                  min: 0,
-                                  max: (_totalPages - 1).toDouble(),
-                                  divisions:
-                                      _totalPages > 1 ? _totalPages - 1 : 1,
-                                  activeColor: Colors.blueAccent,
-                                  inactiveColor: Colors.white24,
-                                  onChanged: (double value) {
-                                    _goToPage(value.round());
-                                  },
-                                ),
-                              ),
-                              Text(
-                                '$_totalPages',
-                                style: const TextStyle(
-                                    color: Colors.white70, fontSize: 12),
-                              ),
-                            ],
+                          child: Slider(
+                            value: _currentPage.toDouble(),
+                            min: 0,
+                            max: (_totalPages - 1).toDouble(),
+                            divisions: _totalPages > 1 ? _totalPages - 1 : 1,
+                            activeColor: Colors.blueAccent,
+                            inactiveColor: Colors.white24,
+                            onChanged: (double value) {
+                              _goToPage(value.round());
+                            },
                           ),
                         ),
                       ),
