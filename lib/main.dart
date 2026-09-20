@@ -177,51 +177,52 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
               ? const Center(child: Text('PDFの読み込みに失敗しました。'))
               : Stack(
                   children: [
-                    // 1. メインのPDF表示エリア ＋ タップ判定
-                    GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onTapUp: (details) {
-                        final touchX = details.globalPosition.dx;
-                        final leftZone = screenWidth * 0.3;  // 左端30%
-                        final rightZone = screenWidth * 0.7; // 右端30%
-
-                        // 画面中央（30%〜70%の間）をタップした場合：バーの表示/非表示を切り替え
-                        if (touchX >= leftZone && touchX <= rightZone) {
-                          setState(() {
-                            _showUI = !_showUI;
-                          });
-                          return;
-                        }
-
-                        // 画面左右のタップ：ページめくり
-                        if (_isRightSwipe) {
-                          if (touchX < leftZone) {
-                            _nextPage();
-                          } else {
-                            _previousPage();
-                          }
-                        } else {
-                          if (touchX > rightZone) {
-                            _nextPage();
-                          } else {
-                            _previousPage();
-                          }
-                        }
+                    // 1. メインのPageView（スワイプが最優先で効く構造）
+                    PageView.builder(
+                      controller: _pageController,
+                      reverse: _isRightSwipe,
+                      itemCount: _totalPages,
+                      onPageChanged: (index) {
+                        setState(() {
+                          _currentPage = index;
+                        });
                       },
-                      child: PageView.builder(
-                        controller: _pageController,
-                        reverse: _isRightSwipe,
-                        itemCount: _totalPages,
-                        onPageChanged: (index) {
-                          setState(() {
-                            _currentPage = index;
-                          });
-                        },
-                        itemBuilder: (context, index) {
-                          final image = _pageImages[index];
-                          if (image == null) return const SizedBox.shrink();
+                      itemBuilder: (context, index) {
+                        final image = _pageImages[index];
+                        if (image == null) return const SizedBox.shrink();
 
-                          return Container(
+                        // 各ページ内でタップを判定（スワイプ操作を害さない設定）
+                        return GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onTapUp: (details) {
+                            final touchX = details.globalPosition.dx;
+                            final leftZone = screenWidth * 0.3;  // 左端30%
+                            final rightZone = screenWidth * 0.7; // 右端30%
+
+                            // 画面中央（30%〜70%）をタップした場合：バーの表示/非表示切替
+                            if (touchX >= leftZone && touchX <= rightZone) {
+                              setState(() {
+                                _showUI = !_showUI;
+                              });
+                              return;
+                            }
+
+                            // 画面左右端のタップ：ページめくり
+                            if (_isRightSwipe) {
+                              if (touchX < leftZone) {
+                                _nextPage();
+                              } else {
+                                _previousPage();
+                              }
+                            } else {
+                              if (touchX > rightZone) {
+                                _nextPage();
+                              } else {
+                                _previousPage();
+                              }
+                            }
+                          },
+                          child: Container(
                             color: Colors.white,
                             child: Center(
                               child: Image.memory(
@@ -229,9 +230,9 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                                 fit: BoxFit.contain,
                               ),
                             ),
-                          );
-                        },
-                      ),
+                          ),
+                        );
+                      },
                     ),
 
                     // 2. 上部アプリバー（アニメーション表示切替）
@@ -250,9 +251,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              // 左側のダミー（タイトルを中央にするため）
                               const SizedBox(width: 80),
-                              // ページ表示
                               GestureDetector(
                                 onTap: _totalPages > 0 ? _showPageJumpDialog : null,
                                 child: Row(
@@ -273,7 +272,6 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                                   ],
                                 ),
                               ),
-                              // 右開き / 左開き 切り替えボタン（シンプル表示）
                               TextButton.icon(
                                 onPressed: () {
                                   setState(() {
