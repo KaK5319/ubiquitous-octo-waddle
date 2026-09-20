@@ -1,6 +1,6 @@
 name: sidebooks_app
 description: "A new Flutter project for SideBooks style reader."
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+publish_to: 'none'
 
 version: 1.0.0+1
 
@@ -15,7 +15,7 @@ dependencies:
   http: ^1.2.0
   path_provider: ^2.1.2
   pdfx: ^2.6.0
-  page_turn: ^0.1.2
+  page_turn: any # バージョン指定エラーを回避するため any に修正
 
   # デザイン用アイコン
   cupertino_icons: ^1.0.6
