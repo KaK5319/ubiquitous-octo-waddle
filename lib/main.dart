@@ -38,7 +38,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
   int _totalPages = 0;
 
   // 設定用フラグ
-  bool _isRightSwipe = false; // true: 右開き（マンガ）, false: 左開き（書籍）
+  bool _isRightSwipe = false; // true: 右開き（マンガ）, false: 左開き（書籍）[span_0](start_span)[span_0](end_span)[span_1](start_span)[span_1](end_span)[span_2](start_span)[span_2](end_span)[span_3](start_span)[span_3](end_span)
 
   final String _samplePdfUrl =
       'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf';
@@ -88,6 +88,16 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
     }
   }
 
+  /// 次のページに進む
+  void _nextPage() {
+    _controller.currentState?.nextPage();
+  }
+
+  /// 前のページに戻る
+  void _previousPage() {
+    _controller.currentState?.previousPage();
+  }
+
   @override
   void dispose() {
     _pdfDocument?.close();
@@ -96,6 +106,8 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+
     return Scaffold(
       backgroundColor: const Color(0xFF222222),
       appBar: AppBar(
@@ -106,20 +118,19 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
         ),
         centerTitle: true,
         actions: [
-          // 開き方向の切り替えUIボタン
           TextButton.icon(
             onPressed: () {
               setState(() {
-                _isRightSwipe = !_isRightSwipe;
+                _isRightSwipe = !_isRightSwipe; //[span_4](start_span)[span_4](end_span)
               });
             },
             icon: Icon(
-              _isRightSwipe ? Icons.arrow_back : Icons.arrow_forward,
+              _isRightSwipe ? Icons.arrow_back : Icons.arrow_forward, //[span_5](start_span)[span_5](end_span)
               color: Colors.white,
               size: 18,
             ),
             label: Text(
-              _isRightSwipe ? '右開き(マンガ)' : '左開き(書籍)',
+              _isRightSwipe ? '右開き(マンガ)' : '左開き(書籍)', //[span_6](start_span)[span_6](end_span)
               style: const TextStyle(color: Colors.white, fontSize: 12),
             ),
           ),
@@ -138,24 +149,46 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
             )
           : _pageImages.isEmpty
               ? const Center(child: Text('PDFの読み込みに失敗しました。'))
-              : PageFlipWidget(
-                  key: _controller,
-                  backgroundColor: const Color(0xFF1A1A1A), // 影を引き立たせるダーク背景
-                  isRightSwipe: _isRightSwipe, // ワンタップで切り替え可能
-                  children: List.generate(_totalPages, (index) {
-                    final image = _pageImages[index];
-                    if (image == null) return const SizedBox.shrink();
+              : GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTapUp: (details) {
+                    final touchPositionX = details.globalPosition.dx;
 
-                    return Container(
-                      color: Colors.white,
-                      child: Center(
-                        child: Image.memory(
-                          image.bytes,
-                          fit: BoxFit.contain,
+                    if (_isRightSwipe) {
+                      // 右開き（マンガ）の場合: 左側タップで進む、右側タップで戻る[span_7](start_span)[span_7](end_span)
+                      if (touchPositionX < screenWidth / 2) {
+                        _nextPage();
+                      } else {
+                        _previousPage();
+                      }
+                    } else {
+                      // 左開き（書籍）の場合: 右側タップで進む、左側タップで戻る[span_8](start_span)[span_8](end_span)
+                      if (touchPositionX > screenWidth / 2) {
+                        _nextPage();
+                      } else {
+                        _previousPage();
+                      }
+                    }
+                  },
+                  child: PageFlipWidget(
+                    key: _controller,
+                    backgroundColor: const Color(0xFF1A1A1A), //[span_9](start_span)[span_9](end_span)
+                    isRightSwipe: _isRightSwipe, //[span_10](start_span)[span_10](end_span)
+                    children: List.generate(_totalPages, (index) {
+                      final image = _pageImages[index];
+                      if (image == null) return const SizedBox.shrink();
+
+                      return Container(
+                        color: Colors.white,
+                        child: Center(
+                          child: Image.memory(
+                            image.bytes,
+                            fit: BoxFit.contain,
+                          ),
                         ),
-                      ),
-                    );
-                  }),
+                      );
+                    }),
+                  ),
                 ),
     );
   }
