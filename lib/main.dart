@@ -111,18 +111,18 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
               : GestureDetector(
                   behavior: HitTestBehavior.translucent,
                   onTapUp: (details) {
-                    // 画面右半分タップで「次」、左半分タップで「前」
-                    if (details.globalPosition.dx > screenWidth / 2) {
+                    // 画面左半分タップで「次へ」、右半分タップで「前へ」
+                    if (details.globalPosition.dx < screenWidth / 2) {
                       _nextPage();
                     } else {
                       _previousPage();
                     }
                   },
                   onHorizontalDragEnd: (details) {
-                    // 右スワイプ（→）で「次」、左スワイプ（←）で「前」
-                    if (details.primaryVelocity! > 100) {
+                    // 左スワイプ（←）で「次へ」、右スワイプ（→）で「前へ」
+                    if (details.primaryVelocity! < -100) {
                       _nextPage();
-                    } else if (details.primaryVelocity! < -100) {
+                    } else if (details.primaryVelocity! > 100) {
                       _previousPage();
                     }
                   },
