@@ -11,13 +11,10 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # ネットワーク・ファイル・PDF関連
+  # ネットワーク・ファイル・PDF関連（すべてNull Safety対応・標準パッケージ）
   http: ^1.2.0
   path_provider: ^2.1.2
   pdfx: ^2.6.0
-
-  # 本物の紙めくり（Page Curl）を実現するパッケージ
-  turn_page: ^1.0.1
 
   # デザイン用アイコン
   cupertino_icons: ^1.0.6
