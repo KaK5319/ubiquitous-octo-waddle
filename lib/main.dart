@@ -37,7 +37,6 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   int currentPage = 0;
   PDFViewController? pdfViewController;
 
-  // テスト用サンプルPDF
   final String samplePdfUrl =
       'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/examples/learning/helloworld.pdf';
 
@@ -105,17 +104,16 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
               : GestureDetector(
                   behavior: HitTestBehavior.translucent,
                   onHorizontalDragEnd: (details) {
-                    // スワイプ速度判定（左スワイプ＝負の値）
-                    if (details.primaryVelocity! < 0) {
-                      // 左スワイプ（←）: 次のページへ進む（右開き・マンガ仕様）
+                    if (details.primaryVelocity! > 0) {
+                      // 右スワイプ（→）: 次のページへ進む
                       _nextPage();
-                    } else if (details.primaryVelocity! > 0) {
-                      // 右スワイプ（→）: 前のページへ戻る
+                    } else if (details.primaryVelocity! < 0) {
+                      // 左スワイプ（←）: 前のページへ戻る
                       _previousPage();
                     }
                   },
                   child: Directionality(
-                    textDirection: TextDirection.rtl, // 右開き（左スワイプで進む）設定
+                    textDirection: TextDirection.rtl,
                     child: PDFView(
                       filePath: localPath,
                       enableSwipe: true,
