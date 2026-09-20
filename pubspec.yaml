@@ -1,6 +1,6 @@
-name: sidebooks_clone
+name: sidebooks_app
 description: "A new Flutter project for SideBooks style reader."
-publish_to: 'none'
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
 version: 1.0.0+1
 
@@ -10,11 +10,15 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  cupertino_icons: ^1.0.6
-  page_flip: ^0.2.1
-  pdfx: ^2.6.0
-  path_provider: ^2.1.2
+
+  # 画面・ネットワーク・ファイル関連パッケージ
   http: ^1.2.0
+  path_provider: ^2.1.2
+  pdfx: ^2.6.0
+  page_turn: ^0.1.2
+
+  # デザイン用アイコン
+  cupertino_icons: ^1.0.6
 
 dev_dependencies:
   flutter_test:
