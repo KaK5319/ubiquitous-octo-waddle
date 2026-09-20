@@ -26,14 +26,23 @@ class MangaReaderScreen extends StatefulWidget {
 }
 
 class _MangaReaderScreenState extends State<MangaReaderScreen> {
-  final PageController _pageController = PageController();
   final int totalPages = 10;
   int currentPage = 0;
 
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
+  void _nextPage() {
+    if (currentPage < totalPages - 1) {
+      setState(() {
+        currentPage++;
+      });
+    }
+  }
+
+  void _previousPage() {
+    if (currentPage > 0) {
+      setState(() {
+        currentPage--;
+      });
+    }
   }
 
   @override
@@ -48,33 +57,31 @@ class _MangaReaderScreenState extends State<MangaReaderScreen> {
         ),
         centerTitle: true,
       ),
-      body: Directionality(
-        textDirection: TextDirection.rtl, // 右開きスワイプ方向（←へめくると進む）
-        child: PageView.builder(
-          controller: _pageController,
-          itemCount: totalPages,
-          onPageChanged: (int index) {
-            setState(() {
-              currentPage = index;
-            });
-          },
-          itemBuilder: (context, index) {
-            return Directionality(
-              textDirection: TextDirection.ltr, // コンテンツの文字・表示方向は標準（左から右）に復元
-              child: Center(
-                child: Container(
-                  margin: const EdgeInsets.all(16),
-                  color: Colors.grey[900],
-                  child: Center(
-                    child: Text(
-                      '${index + 1} ページ目',
-                      style: const TextStyle(fontSize: 24, color: Colors.white),
-                    ),
-                  ),
-                ),
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragEnd: (details) {
+          // X軸の速度を直接判定（左方向のスワイプ＝負の値）
+          if (details.primaryVelocity! < 0) {
+            // 左スワイプ（←）: 次のページへ進む（マンガ仕様）
+            _nextPage();
+          } else if (details.primaryVelocity! > 0) {
+            // 右スワイプ（→）: 前のページへ戻る
+            _previousPage();
+          }
+        },
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          child: Container(
+            key: ValueKey<int>(currentPage),
+            margin: const EdgeInsets.all(16),
+            color: Colors.grey[900],
+            child: Center(
+              child: Text(
+                '${currentPage + 1} ページ目',
+                style: const TextStyle(fontSize: 24, color: Colors.white),
               ),
-            );
-          },
+            ),
+          ),
         ),
       ),
     );
