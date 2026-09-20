@@ -104,17 +104,17 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
               : GestureDetector(
                   behavior: HitTestBehavior.translucent,
                   onHorizontalDragEnd: (details) {
-                    if (details.primaryVelocity! < 0) {
-                      // 左スワイプ（←）: 次のページに進む（マンガ仕様）
+                    if (details.primaryVelocity! > 0) {
+                      // 右スワイプ（→）: 次のページへ進む
                       _nextPage();
-                    } else if (details.primaryVelocity! > 0) {
-                      // 右スワイプ（→）: 前のページに戻る
+                    } else if (details.primaryVelocity! < 0) {
+                      // 左スワイプ（←）: 前のページへ戻る
                       _previousPage();
                     }
                   },
                   child: PDFView(
                     filePath: localPath,
-                    enableSwipe: false, // ライブラリ側のスワイプをOFFにしてGestureDetectorで制御
+                    enableSwipe: false,
                     swipeHorizontal: true,
                     autoSpacing: false,
                     pageFling: true,
