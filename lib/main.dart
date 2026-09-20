@@ -88,18 +88,27 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
     }
   }
 
+  /// 次のページへ
   void _nextPage() {
     if (_currentPage < _totalPages - 1) {
       _controller.currentState?.nextPage();
+      setState(() {
+        _currentPage++;
+      });
     }
   }
 
+  /// 前のページへ
   void _previousPage() {
     if (_currentPage > 0) {
       _controller.currentState?.previousPage();
+      setState(() {
+        _currentPage--;
+      });
     }
   }
 
+  /// 指定ページへ移動
   void _goToPage(int pageIndex) {
     if (pageIndex >= 0 && pageIndex < _totalPages) {
       _controller.currentState?.goToPage(pageIndex);
@@ -109,6 +118,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
     }
   }
 
+  /// ページ指定入力ダイアログ
   void _showPageJumpDialog() {
     final textController = TextEditingController();
     showDialog(
@@ -233,12 +243,6 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                           key: _controller,
                           backgroundColor: const Color(0xFF1A1A1A),
                           isRightSwipe: _isRightSwipe,
-                          // スワイプ操作等でページが変わった際に実行される処理を追加
-                          onPageChanged: (index) {
-                            setState(() {
-                              _currentPage = index;
-                            });
-                          },
                           children: List.generate(_totalPages, (index) {
                             final image = _pageImages[index];
                             if (image == null) return const SizedBox.shrink();
