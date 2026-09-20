@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:pdfx/pdfx.dart';
+import 'package:turn_page/turn_page.dart';
 
 void main() {
   runApp(const SideBooksApp());
@@ -30,7 +31,7 @@ class PageCurlReaderScreen extends StatefulWidget {
 }
 
 class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
-  late PageController _pageController;
+  final TurnPageController _turnPageController = TurnPageController();
   PdfDocument? _pdfDocument;
   List<PdfPageImage?> _pageImages = [];
   bool _isLoading = true;
@@ -38,7 +39,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
   int _currentPage = 0; // 0ベース
 
   bool _isRightSwipe = false; // true: 右開き, false: 左開き
-  bool _showUI = true; // 上下のバーを表示するかどうかのフラグ
+  bool _showUI = true; // 上下のバー表示フラグ
 
   final String _samplePdfUrl =
       'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf';
@@ -46,7 +47,6 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(initialPage: _currentPage);
     _loadAndRenderPdf();
   }
 
@@ -89,26 +89,13 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
     }
   }
 
-  /// ページ移動処理
+  /// ページ移動
   void _goToPage(int pageIndex) {
     if (pageIndex >= 0 && pageIndex < _totalPages) {
-      _pageController.animateToPage(
-        pageIndex,
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOut,
-      );
-    }
-  }
-
-  void _nextPage() {
-    if (_currentPage < _totalPages - 1) {
-      _goToPage(_currentPage + 1);
-    }
-  }
-
-  void _previousPage() {
-    if (_currentPage > 0) {
-      _goToPage(_currentPage - 1);
+      _turnPageController.jumpToPage(pageIndex);
+      setState(() {
+        _currentPage = pageIndex;
+      });
     }
   }
 
@@ -151,7 +138,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
 
   @override
   void dispose() {
-    _pageController.dispose();
+    _turnPageController.dispose();
     _pdfDocument?.close();
     super.dispose();
   }
@@ -161,7 +148,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
     final screenWidth = MediaQuery.of(context).size.width;
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF1A1A1A),
       body: _isLoading
           ? const Center(
               child: Column(
@@ -177,17 +164,18 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
               ? const Center(child: Text('PDFの読み込みに失敗しました。'))
               : Stack(
                   children: [
-                    // 1. メイン画面（PageView）
-                    PageView.builder(
-                      controller: _pageController,
-                      reverse: _isRightSwipe,
-                      itemCount: _totalPages,
+                    // 1. 本物の紙めくり（Page Curl）エフェクト
+                    TurnPage(
+                      controller: _turnPageController,
+                      turnDirection: _isRightSwipe
+                          ? TurnDirection.rightToLeft
+                          : TurnDirection.leftToRight,
                       onPageChanged: (index) {
                         setState(() {
                           _currentPage = index;
                         });
                       },
-                      itemBuilder: (context, index) {
+                      children: List.generate(_totalPages, (index) {
                         final image = _pageImages[index];
                         if (image == null) return const SizedBox.shrink();
 
@@ -198,27 +186,11 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                             final leftZone = screenWidth * 0.3;
                             final rightZone = screenWidth * 0.7;
 
-                            // 画面中央タップ：UIの表示/非表示を切り替え
+                            // 画面中央タップ：UI切り替え
                             if (touchX >= leftZone && touchX <= rightZone) {
                               setState(() {
                                 _showUI = !_showUI;
                               });
-                              return;
-                            }
-
-                            // 画面端タップ：ページ送り
-                            if (_isRightSwipe) {
-                              if (touchX < leftZone) {
-                                _nextPage();
-                              } else {
-                                _previousPage();
-                              }
-                            } else {
-                              if (touchX > rightZone) {
-                                _nextPage();
-                              } else {
-                                _previousPage();
-                              }
                             }
                           },
                           child: Container(
@@ -231,7 +203,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                             ),
                           ),
                         );
-                      },
+                      }),
                     ),
 
                     // 2. 上部ツールバー
