@@ -11,11 +11,10 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # 画面・ネットワーク・ファイル関連パッケージ
+  # ネットワーク・ファイル・PDF関連（すべてNull Safety対応済み）
   http: ^1.2.0
   path_provider: ^2.1.2
   pdfx: ^2.6.0
-  page_turn: any # バージョン指定エラーを回避するため any に修正
 
   # デザイン用アイコン
   cupertino_icons: ^1.0.6
