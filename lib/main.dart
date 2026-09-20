@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:page_flip/page_flip.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdfx/pdfx.dart';
 
@@ -31,14 +30,14 @@ class PageCurlReaderScreen extends StatefulWidget {
 }
 
 class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
-  final _controller = GlobalKey<PageFlipWidgetState>();
+  late PageController _pageController;
   PdfDocument? _pdfDocument;
   List<PdfPageImage?> _pageImages = [];
   bool _isLoading = true;
   int _totalPages = 0;
-  int _currentPage = 0; // 現在のページインデックス (0ベース)
+  int _currentPage = 0; // 0ベース
 
-  bool _isRightSwipe = false;
+  bool _isRightSwipe = false; // true: 右開き（マンガ）, false: 左開き（書籍）
 
   final String _samplePdfUrl =
       'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf';
@@ -46,6 +45,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
   @override
   void initState() {
     super.initState();
+    _pageController = PageController(initialPage: _currentPage);
     _loadAndRenderPdf();
   }
 
@@ -88,33 +88,28 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
     }
   }
 
+  /// ページ移動処理（アニメーション付き）
+  void _goToPage(int pageIndex) {
+    if (pageIndex >= 0 && pageIndex < _totalPages) {
+      _pageController.animateToPage(
+        pageIndex,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
   /// 次のページへ
   void _nextPage() {
     if (_currentPage < _totalPages - 1) {
-      _controller.currentState?.nextPage();
-      setState(() {
-        _currentPage++;
-      });
+      _goToPage(_currentPage + 1);
     }
   }
 
   /// 前のページへ
   void _previousPage() {
     if (_currentPage > 0) {
-      _controller.currentState?.previousPage();
-      setState(() {
-        _currentPage--;
-      });
-    }
-  }
-
-  /// 指定ページへ移動
-  void _goToPage(int pageIndex) {
-    if (pageIndex >= 0 && pageIndex < _totalPages) {
-      _controller.currentState?.goToPage(pageIndex);
-      setState(() {
-        _currentPage = pageIndex;
-      });
+      _goToPage(_currentPage - 1);
     }
   }
 
@@ -157,6 +152,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
 
   @override
   void dispose() {
+    _pageController.dispose();
     _pdfDocument?.close();
     super.dispose();
   }
@@ -212,7 +208,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                 children: [
                   CircularProgressIndicator(color: Colors.white),
                   SizedBox(height: 16),
-                  Text('PDFをページめくり用に変換中...'),
+                  Text('PDFを読み込み中...'),
                 ],
               ),
             )
@@ -239,11 +235,17 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                             }
                           }
                         },
-                        child: PageFlipWidget(
-                          key: _controller,
-                          backgroundColor: const Color(0xFF1A1A1A),
-                          isRightSwipe: _isRightSwipe,
-                          children: List.generate(_totalPages, (index) {
+                        child: PageView.builder(
+                          controller: _pageController,
+                          reverse: _isRightSwipe, // 右開き・左開きの切り替え
+                          itemCount: _totalPages,
+                          onPageChanged: (index) {
+                            // ページが変わるたびに上のテキストとスライダーを確実に更新
+                            setState(() {
+                              _currentPage = index;
+                            });
+                          },
+                          itemBuilder: (context, index) {
                             final image = _pageImages[index];
                             if (image == null) return const SizedBox.shrink();
 
@@ -256,10 +258,11 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                                 ),
                               ),
                             );
-                          }),
+                          },
                         ),
                       ),
                     ),
+                    // 画面下部のシークバー
                     if (_totalPages > 1)
                       Container(
                         color: Colors.black.withOpacity(0.8),
