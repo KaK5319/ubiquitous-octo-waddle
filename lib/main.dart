@@ -36,6 +36,7 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   int totalPages = 0;
   int currentPage = 0;
   PDFViewController? pdfViewController;
+  bool _isPageChanging = false;
 
   final String samplePdfUrl =
       'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/examples/learning/helloworld.pdf';
@@ -69,19 +70,25 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   }
 
   void _nextPage() {
+    if (_isPageChanging) return;
     if (currentPage < totalPages - 1 && pdfViewController != null) {
+      _isPageChanging = true;
       pdfViewController!.setPage(currentPage + 1);
     }
   }
 
   void _previousPage() {
+    if (_isPageChanging) return;
     if (currentPage > 0 && pdfViewController != null) {
+      _isPageChanging = true;
       pdfViewController!.setPage(currentPage - 1);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -103,12 +110,19 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
                 )
               : GestureDetector(
                   behavior: HitTestBehavior.translucent,
-                  onHorizontalDragUpdate: (details) {
-                    if (details.delta.dx > 10) {
-                      // 右方向への移動（→）: 次のページへ進む
+                  onTapUp: (details) {
+                    // 画面右半分タップで「次」、左半分タップで「前」
+                    if (details.globalPosition.dx > screenWidth / 2) {
                       _nextPage();
-                    } else if (details.delta.dx < -10) {
-                      // 左方向への移動（←）: 前のページへ戻る
+                    } else {
+                      _previousPage();
+                    }
+                  },
+                  onHorizontalDragEnd: (details) {
+                    // 右スワイプ（→）で「次」、左スワイプ（←）で「前」
+                    if (details.primaryVelocity! > 100) {
+                      _nextPage();
+                    } else if (details.primaryVelocity! < -100) {
                       _previousPage();
                     }
                   },
@@ -117,7 +131,7 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
                     enableSwipe: false,
                     swipeHorizontal: true,
                     autoSpacing: false,
-                    pageFling: true,
+                    pageFling: false,
                     pageSnap: true,
                     defaultPage: 0,
                     fitPolicy: FitPolicy.BOTH,
@@ -133,6 +147,7 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
                       if (page != null) {
                         setState(() {
                           currentPage = page;
+                          _isPageChanging = false;
                         });
                       }
                     },
