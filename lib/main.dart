@@ -36,7 +36,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
   List<PdfPageImage?> _pageImages = [];
   bool _isLoading = true;
   int _totalPages = 0;
-  int _currentPage = 0;
+  int _currentPage = 0; // 現在のページインデックス (0ベース)
 
   bool _isRightSwipe = false;
 
@@ -91,18 +91,12 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
   void _nextPage() {
     if (_currentPage < _totalPages - 1) {
       _controller.currentState?.nextPage();
-      setState(() {
-        _currentPage++;
-      });
     }
   }
 
   void _previousPage() {
     if (_currentPage > 0) {
       _controller.currentState?.previousPage();
-      setState(() {
-        _currentPage--;
-      });
     }
   }
 
@@ -239,6 +233,12 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                           key: _controller,
                           backgroundColor: const Color(0xFF1A1A1A),
                           isRightSwipe: _isRightSwipe,
+                          // スワイプ操作等でページが変わった際に実行される処理を追加
+                          onPageChanged: (index) {
+                            setState(() {
+                              _currentPage = index;
+                            });
+                          },
                           children: List.generate(_totalPages, (index) {
                             final image = _pageImages[index];
                             if (image == null) return const SizedBox.shrink();
@@ -256,7 +256,6 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                         ),
                       ),
                     ),
-                    // 画面下部のシークバー
                     if (_totalPages > 1)
                       Container(
                         color: Colors.black.withOpacity(0.8),
