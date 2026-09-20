@@ -37,7 +37,6 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
   bool _isLoading = true;
   int _totalPages = 0;
 
-  // テスト用サンプルPDF（複数ページ）
   final String _samplePdfUrl =
       'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf';
 
@@ -47,7 +46,6 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
     _loadAndRenderPdf();
   }
 
-  /// PDFをダウンロードし、各ページを画像としてレンダリングする
   Future<void> _loadAndRenderPdf() async {
     try {
       final response = await http.get(Uri.parse(_samplePdfUrl));
@@ -55,12 +53,10 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
       final file = File('${dir.path}/curl_sample.pdf');
       await file.writeAsBytes(response.bodyBytes, flush: true);
 
-      // PDFドキュメントを開く
       final doc = await PdfDocument.openFile(file.path);
       final count = doc.pagesCount;
       List<PdfPageImage?> images = [];
 
-      // 各ページを画像データ（高画質）に変換
       for (int i = 1; i <= count; i++) {
         final page = await doc.getPage(i);
         final pageImage = await page.render(
@@ -98,7 +94,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF222222), // 読書に集中できるダーク背景
+      backgroundColor: const Color(0xFF222222),
       appBar: AppBar(
         backgroundColor: Colors.black.withOpacity(0.8),
         title: Text(
@@ -123,8 +119,8 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
               : PageFlipWidget(
                   key: _controller,
                   backgroundColor: const Color(0xFF222222),
-                  // 右開き（マンガ形式）の設定：指のドラッグやタップで立体的に曲がります
-                  isRightSwipe: true,
+                  // 左開き（左←向き）に変更
+                  isRightSwipe: false,
                   children: List.generate(_totalPages, (index) {
                     final image = _pageImages[index];
                     if (image == null) return const SizedBox.shrink();
