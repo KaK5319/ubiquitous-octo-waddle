@@ -104,12 +104,11 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
               : GestureDetector(
                   behavior: HitTestBehavior.translucent,
                   onHorizontalDragUpdate: (details) {
-                    // 指の移動量で方向を即時判別（感度を安定化）
-                    if (details.delta.dx < -10) {
-                      // 左方向への移動（←）: 次のページへ進む（マンガ仕様）
+                    if (details.delta.dx > 10) {
+                      // 右方向への移動（→）: 次のページへ進む
                       _nextPage();
-                    } else if (details.delta.dx > 10) {
-                      // 右方向への移動（→）: 前のページへ戻る
+                    } else if (details.delta.dx < -10) {
+                      // 左方向への移動（←）: 前のページへ戻る
                       _previousPage();
                     }
                   },
