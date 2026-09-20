@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:page_turn/page_turn.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdfx/pdfx.dart';
 
@@ -31,7 +30,7 @@ class PageCurlReaderScreen extends StatefulWidget {
 }
 
 class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
-  final GlobalKey<PageTurnState> _pageTurnKey = GlobalKey<PageTurnState>();
+  late PageController _pageController;
   PdfDocument? _pdfDocument;
   List<PdfPageImage?> _pageImages = [];
   bool _isLoading = true;
@@ -47,6 +46,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
   @override
   void initState() {
     super.initState();
+    _pageController = PageController(initialPage: _currentPage);
     _loadAndRenderPdf();
   }
 
@@ -89,6 +89,29 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
     }
   }
 
+  /// ページ移動処理
+  void _goToPage(int pageIndex) {
+    if (pageIndex >= 0 && pageIndex < _totalPages) {
+      _pageController.animateToPage(
+        pageIndex,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  void _nextPage() {
+    if (_currentPage < _totalPages - 1) {
+      _goToPage(_currentPage + 1);
+    }
+  }
+
+  void _previousPage() {
+    if (_currentPage > 0) {
+      _goToPage(_currentPage - 1);
+    }
+  }
+
   /// ページ指定ダイアログ
   void _showPageJumpDialog() {
     final textController = TextEditingController();
@@ -114,10 +137,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
               onPressed: () {
                 final pageNum = int.tryParse(textController.text);
                 if (pageNum != null && pageNum >= 1 && pageNum <= _totalPages) {
-                  // 特定ページへジャンプ
-                  setState(() {
-                    _currentPage = pageNum - 1;
-                  });
+                  _goToPage(pageNum - 1);
                   Navigator.pop(context);
                 }
               },
@@ -131,6 +151,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
 
   @override
   void dispose() {
+    _pageController.dispose();
     _pdfDocument?.close();
     super.dispose();
   }
@@ -139,11 +160,8 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
 
-    // 開き方向によってページ順序を反転
-    final displayImages = _isRightSwipe ? _pageImages.reversed.toList() : _pageImages;
-
     return Scaffold(
-      backgroundColor: const Color(0xFF222222),
+      backgroundColor: const Color(0xFF111111),
       body: _isLoading
           ? const Center(
               child: Column(
@@ -159,40 +177,84 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
               ? const Center(child: Text('PDFの読み込みに失敗しました。'))
               : Stack(
                   children: [
-                    // 1. 本のページめくり (PageTurn)
-                    GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onTapUp: (details) {
-                        final touchX = details.globalPosition.dx;
-                        final leftZone = screenWidth * 0.3;
-                        final rightZone = screenWidth * 0.7;
-
-                        // 画面中央タップでバー表示/非表示切り替え
-                        if (touchX >= leftZone && touchX <= rightZone) {
-                          setState(() {
-                            _showUI = !_showUI;
-                          });
-                        }
+                    // 1. 本風の立体スライドエフェクト付き PageView
+                    PageView.builder(
+                      controller: _pageController,
+                      reverse: _isRightSwipe,
+                      itemCount: _totalPages,
+                      onPageChanged: (index) {
+                        setState(() {
+                          _currentPage = index;
+                        });
                       },
-                      child: PageTurn(
-                        key: _pageTurnKey,
-                        backgroundColor: const Color(0xFF1A1A1A),
-                        showHourGlass: false,
-                        children: List.generate(_totalPages, (index) {
-                          final image = displayImages[index];
-                          if (image == null) return const SizedBox.shrink();
+                      itemBuilder: (context, index) {
+                        final image = _pageImages[index];
+                        if (image == null) return const SizedBox.shrink();
 
-                          return Container(
-                            color: Colors.white,
-                            child: Center(
-                              child: Image.memory(
-                                image.bytes,
-                                fit: BoxFit.contain,
+                        return AnimatedBuilder(
+                          animation: _pageController,
+                          builder: (context, child) {
+                            double value = 0.0;
+                            if (_pageController.position.haveDimensions) {
+                              value = index - (_pageController.page ?? 0);
+                            } else {
+                              value = (index - _currentPage).toDouble();
+                            }
+
+                            // 本をめくるような立体感（重なりと影）のエフェクト処理
+                            final isLeaving = value < 0;
+                            final factor = value.abs().clamp(0.0, 1.0);
+
+                            return Transform.translate(
+                              offset: Offset(isLeaving ? value * screenWidth * 0.3 : 0, 0),
+                              child: Opacity(
+                                opacity: (1.0 - (factor * 0.3)).clamp(0.0, 1.0),
+                                child: child,
+                              ),
+                            );
+                          },
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.translucent,
+                            onTapUp: (details) {
+                              final touchX = details.globalPosition.dx;
+                              final leftZone = screenWidth * 0.3;
+                              final rightZone = screenWidth * 0.7;
+
+                              // 画面中央タップで上下バーを表示/非表示
+                              if (touchX >= leftZone && touchX <= rightZone) {
+                                setState(() {
+                                  _showUI = !_showUI;
+                                });
+                                return;
+                              }
+
+                              // 画面両端タップでページめくり
+                              if (_isRightSwipe) {
+                                if (touchX < leftZone) {
+                                  _nextPage();
+                                } else {
+                                  _previousPage();
+                                }
+                              } else {
+                                if (touchX > rightZone) {
+                                  _nextPage();
+                                } else {
+                                  _previousPage();
+                                }
+                              }
+                            },
+                            child: Container(
+                              color: Colors.white,
+                              child: Center(
+                                child: Image.memory(
+                                  image.bytes,
+                                  fit: BoxFit.contain,
+                                ),
                               ),
                             ),
-                          );
-                        }),
-                      ),
+                          ),
+                        );
+                      },
                     ),
 
                     // 2. 上部アプリバー
@@ -212,7 +274,6 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               const SizedBox(width: 70),
-                              // ページ番号表示
                               GestureDetector(
                                 onTap: _totalPages > 0 ? _showPageJumpDialog : null,
                                 child: Row(
@@ -233,7 +294,6 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                                   ],
                                 ),
                               ),
-                              // 右開き / 左開き 切り替え
                               TextButton.icon(
                                 onPressed: () {
                                   setState(() {
@@ -261,7 +321,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                       ),
                     ),
 
-                    // 3. 下部シークバー（両端の数字なし）
+                    // 3. 下部シークバー（数字非表示）
                     AnimatedPositioned(
                       duration: const Duration(milliseconds: 200),
                       bottom: _showUI ? 0 : -100,
@@ -283,9 +343,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                             activeColor: Colors.blueAccent,
                             inactiveColor: Colors.white24,
                             onChanged: (double value) {
-                              setState(() {
-                                _currentPage = value.round();
-                              });
+                              _goToPage(value.round());
                             },
                           ),
                         ),
