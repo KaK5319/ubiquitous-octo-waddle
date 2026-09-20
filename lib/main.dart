@@ -36,9 +36,10 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
   List<PdfPageImage?> _pageImages = [];
   bool _isLoading = true;
   int _totalPages = 0;
+  int _currentPage = 0; // 現在のページインデックス (0ベース)
 
   // 設定用フラグ
-  bool _isRightSwipe = false; // true: 右開き（マンガ）, false: 左開き（書籍）[span_0](start_span)[span_0](end_span)[span_1](start_span)[span_1](end_span)[span_2](start_span)[span_2](end_span)[span_3](start_span)[span_3](end_span)
+  bool _isRightSwipe = false; // true: 右開き（マンガ）, false: 左開き（書籍）[span_4](start_span)[span_4](end_span)[span_5](start_span)[span_5](end_span)[span_6](start_span)[span_6](end_span)
 
   final String _samplePdfUrl =
       'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf';
@@ -90,12 +91,69 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
 
   /// 次のページに進む
   void _nextPage() {
-    _controller.currentState?.nextPage();
+    if (_currentPage < _totalPages - 1) {
+      _controller.currentState?.nextPage();
+      setState(() {
+        _currentPage++;
+      });
+    }
   }
 
   /// 前のページに戻る
   void _previousPage() {
-    _controller.currentState?.previousPage();
+    if (_currentPage > 0) {
+      _controller.currentState?.previousPage();
+      setState(() {
+        _currentPage--;
+      });
+    }
+  }
+
+  /// 指定ページへジャンプ
+  void _goToPage(int pageIndex) {
+    if (pageIndex >= 0 && pageIndex < _totalPages) {
+      _controller.currentState?.goToPage(pageIndex);
+      setState(() {
+        _currentPage = pageIndex;
+      });
+    }
+  }
+
+  /// ページ番号直接入力ダイアログ
+  void _showPageJumpDialog() {
+    final textController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('ページ指定移動'),
+          content: TextField(
+            controller: textController,
+            keyboardType: TextInputType.number,
+            autofocus: true,
+            decoration: InputDecoration(
+              hintText: '1 ～ $_totalPages の数字を入力',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('キャンセル'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final pageNum = int.tryParse(textController.text);
+                if (pageNum != null && pageNum >= 1 && pageNum <= _totalPages) {
+                  _goToPage(pageNum - 1);
+                  Navigator.pop(context);
+                }
+              },
+              child: const Text('移動'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -112,25 +170,37 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
       backgroundColor: const Color(0xFF222222),
       appBar: AppBar(
         backgroundColor: Colors.black.withOpacity(0.8),
-        title: Text(
-          _totalPages > 0 ? '全 $_totalPages ページ' : '読み込み中...',
-          style: const TextStyle(fontSize: 16),
+        title: GestureDetector(
+          onTap: _totalPages > 0 ? _showPageJumpDialog : null,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _totalPages > 0
+                    ? '${_currentPage + 1} / $_totalPages ページ'
+                    : '読み込み中...',
+                style: const TextStyle(fontSize: 16),
+              ),
+              if (_totalPages > 0)
+                const Icon(Icons.arrow_drop_down, size: 20),
+            ],
+          ),
         ),
         centerTitle: true,
         actions: [
           TextButton.icon(
             onPressed: () {
               setState(() {
-                _isRightSwipe = !_isRightSwipe; //[span_4](start_span)[span_4](end_span)
+                _isRightSwipe = !_isRightSwipe;
               });
             },
             icon: Icon(
-              _isRightSwipe ? Icons.arrow_back : Icons.arrow_forward, //[span_5](start_span)[span_5](end_span)
+              _isRightSwipe ? Icons.arrow_back : Icons.arrow_forward,
               color: Colors.white,
               size: 18,
             ),
             label: Text(
-              _isRightSwipe ? '右開き(マンガ)' : '左開き(書籍)', //[span_6](start_span)[span_6](end_span)
+              _isRightSwipe ? '右開き(マンガ)' : '左開き(書籍)',
               style: const TextStyle(color: Colors.white, fontSize: 12),
             ),
           ),
@@ -155,14 +225,12 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                     final touchPositionX = details.globalPosition.dx;
 
                     if (_isRightSwipe) {
-                      // 右開き（マンガ）の場合: 左側タップで進む、右側タップで戻る[span_7](start_span)[span_7](end_span)
                       if (touchPositionX < screenWidth / 2) {
                         _nextPage();
                       } else {
                         _previousPage();
                       }
                     } else {
-                      // 左開き（書籍）の場合: 右側タップで進む、左側タップで戻る[span_8](start_span)[span_8](end_span)
                       if (touchPositionX > screenWidth / 2) {
                         _nextPage();
                       } else {
@@ -172,8 +240,8 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                   },
                   child: PageFlipWidget(
                     key: _controller,
-                    backgroundColor: const Color(0xFF1A1A1A), //[span_9](start_span)[span_9](end_span)
-                    isRightSwipe: _isRightSwipe, //[span_10](start_span)[span_10](end_span)
+                    backgroundColor: const Color(0xFF1A1A1A),
+                    isRightSwipe: _isRightSwipe,
                     children: List.generate(_totalPages, (index) {
                       final image = _pageImages[index];
                       if (image == null) return const SizedBox.shrink();
@@ -190,6 +258,40 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                     }),
                   ),
                 ),
+      // 画面下部のスライダー（シークバー）バー
+      bottomNavigationBar: _isLoading || _totalPages <= 1
+          ? null
+          : Container(
+              color: Colors.black.withOpacity(0.8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: SafeArea(
+                child: Row(
+                  children: [
+                    Text(
+                      '1',
+                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                    Expanded(
+                      child: Slider(
+                        value: _currentPage.toDouble(),
+                        min: 0,
+                        max: (_totalPages - 1).toDouble(),
+                        divisions: _totalPages > 1 ? _totalPages - 1 : 1,
+                        activeColor: Colors.blueAccent,
+                        inactiveColor: Colors.white24,
+                        onChanged: (double value) {
+                          _goToPage(value.round());
+                        },
+                      ),
+                    ),
+                    Text(
+                      '$_totalPages',
+                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ),
     );
   }
 }
