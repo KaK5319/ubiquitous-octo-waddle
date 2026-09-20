@@ -1,4 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_pdfview/flutter_pdfview.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:http/http.dart' as http;
 
 void main() {
   runApp(const SideBooksApp());
@@ -13,35 +17,72 @@ class SideBooksApp extends StatelessWidget {
       title: 'SideBooks Style Reader',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(),
-      home: const ReaderScreen(),
+      home: const PdfReaderScreen(),
     );
   }
 }
 
-class ReaderScreen extends StatefulWidget {
-  const ReaderScreen({Key? key}) : super(key: key);
+class PdfReaderScreen extends StatefulWidget {
+  const PdfReaderScreen({Key? key}) : super(key: key);
 
   @override
-  State<ReaderScreen> createState() => _ReaderScreenState();
+  State<PdfReaderScreen> createState() => _PdfReaderScreenState();
 }
 
-class _ReaderScreenState extends State<ReaderScreen> {
-  final int totalPages = 10;
+class _PdfReaderScreenState extends State<PdfReaderScreen> {
+  String? localPath;
+  bool isLoading = true;
+  int totalPages = 0;
   int currentPage = 0;
+  PDFViewController? pdfViewController;
+  bool _isPageChanging = false;
+
+  // 複数ページ（全10ページ前後）のサンプルPDF
+  final String samplePdfUrl =
+      'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPdf();
+  }
+
+  Future<void> _loadPdf() async {
+    try {
+      final response = await http.get(Uri.parse(samplePdfUrl));
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/sample_multi_page.pdf');
+
+      await file.writeAsBytes(response.bodyBytes, flush: true);
+
+      if (mounted) {
+        setState(() {
+          localPath = file.path;
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
+  }
 
   void _nextPage() {
-    if (currentPage < totalPages - 1) {
-      setState(() {
-        currentPage++;
-      });
+    if (_isPageChanging) return;
+    if (currentPage < totalPages - 1 && pdfViewController != null) {
+      _isPageChanging = true;
+      pdfViewController!.setPage(currentPage + 1);
     }
   }
 
   void _previousPage() {
-    if (currentPage > 0) {
-      setState(() {
-        currentPage--;
-      });
+    if (_isPageChanging) return;
+    if (currentPage > 0 && pdfViewController != null) {
+      _isPageChanging = true;
+      pdfViewController!.setPage(currentPage - 1);
     }
   }
 
@@ -54,46 +95,76 @@ class _ReaderScreenState extends State<ReaderScreen> {
       appBar: AppBar(
         backgroundColor: Colors.black.withOpacity(0.8),
         title: Text(
-          '${currentPage + 1} / $totalPages',
+          totalPages > 0 ? '${currentPage + 1} / $totalPages' : 'PDF Reader',
           style: const TextStyle(fontSize: 16),
         ),
         centerTitle: true,
       ),
-      body: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTapUp: (details) {
-          // 画面右半分タップで「次へ」、左半分タップで「前へ」
-          if (details.globalPosition.dx > screenWidth / 2) {
-            _nextPage();
-          } else {
-            _previousPage();
-          }
-        },
-        onHorizontalDragEnd: (details) {
-          // 右スワイプ（→）で「次へ」、左スワイプ（←）で「前へ」
-          if (details.primaryVelocity! > 100) {
-            _nextPage();
-          } else if (details.primaryVelocity! < -100) {
-            _previousPage();
-          }
-        },
-        child: Container(
-          width: double.infinity,
-          height: double.infinity,
-          color: Colors.grey[900],
-          margin: const EdgeInsets.all(16),
-          child: Center(
-            child: Text(
-              '${currentPage + 1} ページ目',
-              style: const TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
+      body: isLoading
+          ? const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('PDFファイルをダウンロード中...'),
+                ],
               ),
-            ),
-          ),
-        ),
-      ),
+            )
+          : localPath == null
+              ? const Center(
+                  child: Text(
+                    'PDFの読み込みに失敗しました。',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                )
+              : GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTapUp: (details) {
+                    // 【右開き設定（マンガ等）】
+                    // 画面左側タップで「次へ」、右側タップで「前へ」
+                    if (details.globalPosition.dx < screenWidth / 2) {
+                      _nextPage();
+                    } else {
+                      _previousPage();
+                    }
+                  },
+                  onHorizontalDragEnd: (details) {
+                    // 【右開き設定（マンガ等）】
+                    // 左スワイプ（←）で「次へ」、右スワイプ（→）で「前へ」
+                    if (details.primaryVelocity! < -100) {
+                      _nextPage();
+                    } else if (details.primaryVelocity! > 100) {
+                      _previousPage();
+                    }
+                  },
+                  child: PDFView(
+                    filePath: localPath,
+                    enableSwipe: false, // 標準スワイプを無効化して自前のGestureDetectorを優先
+                    swipeHorizontal: true,
+                    autoSpacing: false,
+                    pageFling: false,
+                    pageSnap: true,
+                    defaultPage: 0,
+                    fitPolicy: FitPolicy.BOTH,
+                    onRender: (pages) {
+                      setState(() {
+                        totalPages = pages ?? 0;
+                      });
+                    },
+                    onViewCreated: (PDFViewController controller) {
+                      pdfViewController = controller;
+                    },
+                    onPageChanged: (int? page, int? total) {
+                      if (page != null) {
+                        setState(() {
+                          currentPage = page;
+                          _isPageChanging = false;
+                        });
+                      }
+                    },
+                  ),
+                ),
     );
   }
 }
