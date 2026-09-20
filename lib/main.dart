@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
@@ -10,7 +9,7 @@ void main() {
 }
 
 class SideBooksApp extends StatelessWidget {
-  const SideBooksApp({Key? key}) : super(key: key);
+  const SideBooksApp({Key? key}) : super(Key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -95,8 +94,8 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
     if (pageIndex >= 0 && pageIndex < _totalPages) {
       _pageController.animateToPage(
         pageIndex,
-        duration: const Duration(milliseconds: 350),
-        curve: Curves.easeOut,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
       );
     }
   }
@@ -178,7 +177,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
               ? const Center(child: Text('PDFの読み込みに失敗しました。'))
               : Stack(
                   children: [
-                    // 1. 本物の紙めくり風3Dアニメーション PageView
+                    // 1. 本の重ねめくり（レイヤー影付きスライド）PageView
                     PageView.builder(
                       controller: _pageController,
                       reverse: _isRightSwipe,
@@ -202,26 +201,33 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                               position = (index - _currentPage).toDouble();
                             }
 
-                            // めくり方向・立体計算
-                            final isCurrentOrPast = position <= 0;
-                            final angle = position * (math.pi / 2.2); // 3D回転角度
-                            final shadowOpacity = (position.abs()).clamp(0.0, 0.6);
+                            // ページがめくれる際の背後の透け感と影の計算
+                            final isLeaving = position < 0;
+                            final shadowOpacity = (position.abs()).clamp(0.0, 0.4);
 
-                            return Transform(
-                              transform: Matrix4.identity()
-                                ..setEntry(3, 2, 0.0012) // 3D奥行きパラメータ
-                                ..rotateY(angle.clamp(-math.pi / 2, math.pi / 2)),
-                              alignment: isCurrentOrPast
-                                  ? Alignment.centerLeft
-                                  : Alignment.centerRight,
+                            return Transform.translate(
+                              offset: Offset(0, 0),
                               child: Stack(
                                 children: [
                                   child!,
-                                  // 紙の影エフェクト
+                                  // めくられている最中の端の影グラデーション
                                   if (position != 0)
                                     Positioned.fill(
                                       child: Container(
-                                        color: Colors.black.withOpacity(shadowOpacity),
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            begin: isLeaving
+                                                ? Alignment.centerRight
+                                                : Alignment.centerLeft,
+                                            end: isLeaving
+                                                ? Alignment.centerLeft
+                                                : Alignment.centerRight,
+                                            colors: [
+                                              Colors.black.withOpacity(shadowOpacity),
+                                              Colors.transparent,
+                                            ],
+                                          ),
+                                        ),
                                       ),
                                     ),
                                 ],
@@ -288,11 +294,11 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const SizedBox(width: 70),
+                              const SizedBox(width: 80),
                               GestureDetector(
                                 onTap: _totalPages > 0 ? _showPageJumpDialog : null,
                                 child: Row(
-                                  mainAxisSize: MainAxisSize.min,
+                                  mainAxisSize: MinAxisSize.min,
                                   children: [
                                     Text(
                                       _totalPages > 0
@@ -309,24 +315,19 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                                   ],
                                 ),
                               ),
-                              TextButton.icon(
+                              // ご要望の表示形式（→ 右開き / ← 左開き）に修正
+                              TextButton(
                                 onPressed: () {
                                   setState(() {
                                     _isRightSwipe = !_isRightSwipe;
                                   });
                                 },
-                                icon: Icon(
-                                  _isRightSwipe
-                                      ? Icons.arrow_back
-                                      : Icons.arrow_forward,
-                                  color: Colors.white,
-                                  size: 16,
-                                ),
-                                label: Text(
-                                  _isRightSwipe ? '右開き' : '左開き',
+                                child: Text(
+                                  _isRightSwipe ? '→ 右開き' : '← 左開き',
                                   style: const TextStyle(
                                     color: Colors.white,
-                                    fontSize: 13,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
                                   ),
                                 ),
                               ),
