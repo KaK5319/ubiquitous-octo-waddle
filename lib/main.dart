@@ -37,6 +37,9 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
   bool _isLoading = true;
   int _totalPages = 0;
 
+  // 設定用フラグ
+  bool _isRightSwipe = false; // true: 右開き（マンガ）, false: 左開き（書籍）
+
   final String _samplePdfUrl =
       'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf';
 
@@ -102,6 +105,25 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
           style: const TextStyle(fontSize: 16),
         ),
         centerTitle: true,
+        actions: [
+          // 開き方向の切り替えUIボタン
+          TextButton.icon(
+            onPressed: () {
+              setState(() {
+                _isRightSwipe = !_isRightSwipe;
+              });
+            },
+            icon: Icon(
+              _isRightSwipe ? Icons.arrow_back : Icons.arrow_forward,
+              color: Colors.white,
+              size: 18,
+            ),
+            label: Text(
+              _isRightSwipe ? '右開き(マンガ)' : '左開き(書籍)',
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+            ),
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(
@@ -118,9 +140,8 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
               ? const Center(child: Text('PDFの読み込みに失敗しました。'))
               : PageFlipWidget(
                   key: _controller,
-                  backgroundColor: const Color(0xFF222222),
-                  // 左開き（左←向き）に変更
-                  isRightSwipe: false,
+                  backgroundColor: const Color(0xFF1A1A1A), // 影を引き立たせるダーク背景
+                  isRightSwipe: _isRightSwipe, // ワンタップで切り替え可能
                   children: List.generate(_totalPages, (index) {
                     final image = _pageImages[index];
                     if (image == null) return const SizedBox.shrink();
