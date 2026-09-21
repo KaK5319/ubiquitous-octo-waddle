@@ -95,7 +95,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
       _pageController.animateToPage(
         pageIndex,
         duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
+        curve: Curves.easeInOutQuad,
       );
     }
   }
@@ -176,7 +176,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
               ? const Center(child: Text('PDFの読み込みに失敗しました。'))
               : Stack(
                   children: [
-                    // 本物の立体めくりアニメーション
+                    // 柔らかい紙のカールめくりアニメーション
                     PageView.builder(
                       controller: _pageController,
                       reverse: _isRightSwipe,
@@ -200,41 +200,69 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                               position = (index - _currentPage).toDouble();
                             }
 
-                            // ページめくりの角度計算 (-90度〜+90度)
-                            final angle = position * (math.pi / 2);
-                            final isCurving = position != 0;
+                            // ページがめくれる進行度 (0.0 ～ 1.0)
+                            final progress = position.abs().clamp(0.0, 1.0);
+                            final isLeaving = position < 0;
+
+                            // 湾曲（紙のたわみ）と対角回転の計算
+                            final curlAngle = position * (math.pi / 3);
+                            final skewAmount = isLeaving ? -0.15 * progress : 0.15 * progress;
 
                             return Transform(
                               transform: Matrix4.identity()
-                                ..setEntry(3, 2, 0.0015) // パースペクティブ（遠近感）
-                                ..rotateY(angle),
+                                ..setEntry(3, 2, 0.001) // パースペクティブ
+                                ..rotateY(curlAngle) // Y軸回転
+                                ..rotateZ(skewAmount), // Z軸の傾きで対角めくり感を演出
                               alignment: position < 0
-                                  ? Alignment.centerRight
-                                  : Alignment.centerLeft,
+                                  ? Alignment.bottomRight
+                                  : Alignment.bottomLeft,
                               child: Stack(
                                 children: [
                                   child!,
-                                  // めくり時の立体的な影
-                                  if (isCurving)
+                                  // めくれる紙のカーブと影の表現
+                                  if (position != 0) ...[
+                                    // ページ内側の柔らかな影
                                     Positioned.fill(
                                       child: Container(
                                         decoration: BoxDecoration(
                                           gradient: LinearGradient(
-                                            begin: position < 0
+                                            begin: isLeaving
                                                 ? Alignment.centerLeft
                                                 : Alignment.centerRight,
-                                            end: position < 0
+                                            end: isLeaving
                                                 ? Alignment.centerRight
                                                 : Alignment.centerLeft,
                                             colors: [
                                               Colors.black.withOpacity(
-                                                  (position.abs() * 0.5).clamp(0.0, 0.6)),
+                                                  (progress * 0.45).clamp(0.0, 0.5)),
+                                              Colors.black.withOpacity(0.05),
                                               Colors.transparent,
                                             ],
                                           ),
                                         ),
                                       ),
                                     ),
+                                    // 捲れ上がった背面の ハイライト／シーム影
+                                    Positioned.fill(
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            begin: isLeaving
+                                                ? Alignment.topRight
+                                                : Alignment.topLeft,
+                                            end: isLeaving
+                                                ? Alignment.bottomLeft
+                                                : Alignment.bottomRight,
+                                            colors: [
+                                              Colors.white.withOpacity(
+                                                  (progress * 0.25).clamp(0.0, 0.3)),
+                                              Colors.transparent,
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                             );
@@ -318,7 +346,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                                   ],
                                 ),
                               ),
-                              // 修正：← 右開き / → 左開き
+                              // 修正：ご指定通りの文字表記 (→ 右開き / ← 左開き)
                               TextButton(
                                 onPressed: () {
                                   setState(() {
@@ -326,7 +354,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                                   });
                                 },
                                 child: Text(
-                                  _isRightSwipe ? '← 右開き' : '→ 左開き',
+                                  _isRightSwipe ? '← 左開き' : '→ 右開き',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 15,
