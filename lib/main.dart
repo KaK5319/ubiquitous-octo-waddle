@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
@@ -35,10 +36,10 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
   List<PdfPageImage?> _pageImages = [];
   bool _isLoading = true;
   int _totalPages = 0;
-  int _currentPage = 0; // 0ベース
+  int _currentPage = 0;
 
   bool _isRightSwipe = false; // true: 右開き, false: 左開き
-  bool _showUI = true; // 上下のバー表示フラグ
+  bool _showUI = true;
 
   final String _samplePdfUrl =
       'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf';
@@ -89,13 +90,12 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
     }
   }
 
-  /// ページ移動
   void _goToPage(int pageIndex) {
     if (pageIndex >= 0 && pageIndex < _totalPages) {
       _pageController.animateToPage(
         pageIndex,
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOutCubic,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
       );
     }
   }
@@ -112,7 +112,6 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
     }
   }
 
-  /// ページ指定ダイアログ
   void _showPageJumpDialog() {
     final textController = TextEditingController();
     showDialog(
@@ -177,7 +176,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
               ? const Center(child: Text('PDFの読み込みに失敗しました。'))
               : Stack(
                   children: [
-                    // 1. 本の重ねめくり（レイヤー影付きスライド）PageView
+                    // 本物の立体めくりアニメーション
                     PageView.builder(
                       controller: _pageController,
                       reverse: _isRightSwipe,
@@ -201,29 +200,35 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                               position = (index - _currentPage).toDouble();
                             }
 
-                            // ページがめくれる際の背後の透け感と影の計算
-                            final isLeaving = position < 0;
-                            final shadowOpacity = (position.abs()).clamp(0.0, 0.4);
+                            // ページめくりの角度計算 (-90度〜+90度)
+                            final angle = position * (math.pi / 2);
+                            final isCurving = position != 0;
 
-                            return Transform.translate(
-                              offset: Offset.zero,
+                            return Transform(
+                              transform: Matrix4.identity()
+                                ..setEntry(3, 2, 0.0015) // パースペクティブ（遠近感）
+                                ..rotateY(angle),
+                              alignment: position < 0
+                                  ? Alignment.centerRight
+                                  : Alignment.centerLeft,
                               child: Stack(
                                 children: [
                                   child!,
-                                  // めくられている最中の端の影グラデーション
-                                  if (position != 0)
+                                  // めくり時の立体的な影
+                                  if (isCurving)
                                     Positioned.fill(
                                       child: Container(
                                         decoration: BoxDecoration(
                                           gradient: LinearGradient(
-                                            begin: isLeaving
-                                                ? Alignment.centerRight
-                                                : Alignment.centerLeft,
-                                            end: isLeaving
+                                            begin: position < 0
                                                 ? Alignment.centerLeft
                                                 : Alignment.centerRight,
+                                            end: position < 0
+                                                ? Alignment.centerRight
+                                                : Alignment.centerLeft,
                                             colors: [
-                                              Colors.black.withOpacity(shadowOpacity),
+                                              Colors.black.withOpacity(
+                                                  (position.abs() * 0.5).clamp(0.0, 0.6)),
                                               Colors.transparent,
                                             ],
                                           ),
@@ -241,7 +246,6 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                               final leftZone = screenWidth * 0.3;
                               final rightZone = screenWidth * 0.7;
 
-                              // 画面中央タップ：UI表示切替
                               if (touchX >= leftZone && touchX <= rightZone) {
                                 setState(() {
                                   _showUI = !_showUI;
@@ -249,7 +253,6 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                                 return;
                               }
 
-                              // 画面端タップ：ページめくり
                               if (_isRightSwipe) {
                                 if (touchX < leftZone) {
                                   _nextPage();
@@ -278,7 +281,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                       },
                     ),
 
-                    // 2. 上部ツールバー
+                    // 上部ツールバー
                     AnimatedPositioned(
                       duration: const Duration(milliseconds: 200),
                       top: _showUI ? 0 : -100,
@@ -315,7 +318,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                                   ],
                                 ),
                               ),
-                              // ご要望の表示（→ 右開き / ← 左開き）
+                              // 修正：← 右開き / → 左開き
                               TextButton(
                                 onPressed: () {
                                   setState(() {
@@ -323,7 +326,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                                   });
                                 },
                                 child: Text(
-                                  _isRightSwipe ? '→ 右開き' : '← 左開き',
+                                  _isRightSwipe ? '← 右開き' : '→ 左開き',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 15,
@@ -337,7 +340,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                       ),
                     ),
 
-                    // 3. 下部シークバー
+                    // 下部シークバー
                     AnimatedPositioned(
                       duration: const Duration(milliseconds: 200),
                       bottom: _showUI ? 0 : -100,
