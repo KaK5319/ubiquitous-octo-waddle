@@ -37,7 +37,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
   int _totalPages = 0;
   int _currentPage = 0;
 
-  bool _isRightSwipe = false; // true: 右開き, false: 左開き
+  bool _isRightSwipe = true; // true: → 右開き, false: ← 左開き
   bool _showUI = true;
 
   final String _samplePdfUrl =
@@ -175,7 +175,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
               ? const Center(child: Text('PDFの読み込みに失敗しました。'))
               : Stack(
                   children: [
-                    // 重ね合わせ＋影の自然なめくり
+                    // SideBooksスタイルの重なりスライドめくり
                     PageView.builder(
                       controller: _pageController,
                       reverse: _isRightSwipe,
@@ -199,21 +199,21 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                               position = (index - _currentPage).toDouble();
                             }
 
-                            // ページが重なっていく時の端の影の濃さ
-                            final shadowOpacity = (1.0 - position.abs().clamp(0.0, 1.0)) * 0.4;
+                            // スライド中の境界に落とす中央背面の自然な陰影
                             final isLeaving = position < 0;
+                            final shadowProgress = (1.0 - position.abs()).clamp(0.0, 1.0);
 
                             return Stack(
                               children: [
                                 child!,
-                                // ページの境目に落ちる縦方向のリアルな影グラデーション
+                                // ページ境界の縦シャドウ（SideBooks風）
                                 if (position != 0)
                                   Positioned(
                                     top: 0,
                                     bottom: 0,
                                     left: isLeaving ? null : 0,
                                     right: isLeaving ? 0 : null,
-                                    width: 30, // 影の幅
+                                    width: 25,
                                     child: Container(
                                       decoration: BoxDecoration(
                                         gradient: LinearGradient(
@@ -224,7 +224,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                                               ? Alignment.centerLeft
                                               : Alignment.centerRight,
                                           colors: [
-                                            Colors.black.withOpacity(shadowOpacity),
+                                            Colors.black.withOpacity(0.35 * shadowProgress),
                                             Colors.transparent,
                                           ],
                                         ),
@@ -313,7 +313,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                                   ],
                                 ),
                               ),
-                              // 右開き / 左開き 表記
+                              // ご要望通りの正確なテキストと矢印表示
                               TextButton(
                                 onPressed: () {
                                   setState(() {
