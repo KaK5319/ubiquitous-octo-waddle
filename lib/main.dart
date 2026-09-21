@@ -9,7 +9,7 @@ void main() {
 }
 
 class SideBooksApp extends StatelessWidget {
-  const SideBooksApp({Key? key}) : super(Key: key);
+  const SideBooksApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -23,7 +23,7 @@ class SideBooksApp extends StatelessWidget {
 }
 
 class PageCurlReaderScreen extends StatefulWidget {
-  const PageCurlReaderScreen({Key? key}) : super(key: key);
+  const PageCurlReaderScreen({super.key});
 
   @override
   State<PageCurlReaderScreen> createState() => _PageCurlReaderScreenState();
@@ -206,7 +206,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                             final shadowOpacity = (position.abs()).clamp(0.0, 0.4);
 
                             return Transform.translate(
-                              offset: Offset(0, 0),
+                              offset: Offset.zero,
                               child: Stack(
                                 children: [
                                   child!,
@@ -298,7 +298,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                               GestureDetector(
                                 onTap: _totalPages > 0 ? _showPageJumpDialog : null,
                                 child: Row(
-                                  mainAxisSize: MinAxisSize.min,
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Text(
                                       _totalPages > 0
@@ -315,7 +315,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                                   ],
                                 ),
                               ),
-                              // ご要望の表示形式（→ 右開き / ← 左開き）に修正
+                              // ご要望の表示（→ 右開き / ← 左開き）
                               TextButton(
                                 onPressed: () {
                                   setState(() {
