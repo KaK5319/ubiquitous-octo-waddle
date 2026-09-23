@@ -37,7 +37,9 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
   int _totalPages = 0;
   int _currentPage = 0;
 
-  bool _isRightSwipe = true; // true: → 右開き, false: ← 左開き
+  // true: 右開き（日本語本・漫画など：右スワイプで進む）
+  // false: 左開き（洋書・横書きなど：左スワイプで進む）
+  bool _isRightSwipe = true; 
   bool _showUI = true;
 
   final String _samplePdfUrl =
@@ -175,10 +177,10 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
               ? const Center(child: Text('PDFの読み込みに失敗しました。'))
               : Stack(
                   children: [
-                    // SideBooksスタイルの重なりスライドめくり
                     PageView.builder(
                       controller: _pageController,
-                      reverse: _isRightSwipe,
+                      // 右開きの場合は reverse を false にし、右スワイプ（左→右）でページが進むように調整
+                      reverse: !_isRightSwipe,
                       itemCount: _totalPages,
                       onPageChanged: (index) {
                         setState(() {
@@ -199,14 +201,13 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                               position = (index - _currentPage).toDouble();
                             }
 
-                            // スライド中の境界に落とす中央背面の自然な陰影
                             final isLeaving = position < 0;
                             final shadowProgress = (1.0 - position.abs()).clamp(0.0, 1.0);
 
                             return Stack(
                               children: [
                                 child!,
-                                // ページ境界の縦シャドウ（SideBooks風）
+                                // ページ境界の影グラデーション
                                 if (position != 0)
                                   Positioned(
                                     top: 0,
@@ -241,6 +242,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                               final leftZone = screenWidth * 0.3;
                               final rightZone = screenWidth * 0.7;
 
+                              // 中央エリアタップでUIトグル
                               if (touchX >= leftZone && touchX <= rightZone) {
                                 setState(() {
                                   _showUI = !_showUI;
@@ -248,13 +250,16 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                                 return;
                               }
 
+                              // タップエリアに応じたページ進降の判定
                               if (_isRightSwipe) {
+                                // 右開き：左領域タップで次ページ、右領域タップで前ページ
                                 if (touchX < leftZone) {
                                   _nextPage();
                                 } else {
                                   _previousPage();
                                 }
                               } else {
+                                // 左開き：右領域タップで次ページ、左領域タップで前ページ
                                 if (touchX > rightZone) {
                                   _nextPage();
                                 } else {
@@ -313,7 +318,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                                   ],
                                 ),
                               ),
-                              // ご要望通りの正確なテキストと矢印表示
+                              // 右開き / 左開きの切り替えボタン
                               TextButton(
                                 onPressed: () {
                                   setState(() {
