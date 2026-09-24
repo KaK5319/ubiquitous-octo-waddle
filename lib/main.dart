@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:page_flip/page_flip.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdfx/pdfx.dart';
 
@@ -30,15 +31,14 @@ class PageCurlReaderScreen extends StatefulWidget {
 }
 
 class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
-  late PageController _pageController;
+  final _controller = GlobalKey<PageFlipWidgetState>();
   PdfDocument? _pdfDocument;
   List<PdfPageImage?> _pageImages = [];
   bool _isLoading = true;
   int _totalPages = 0;
   int _currentPage = 0;
 
-  // true: 右開き（日本語本・漫画など：右スワイプで進む）
-  // false: 左開き（洋書・横書きなど：左スワイプで進む）
+  // true: 右開き（日本語本・漫画など） / false: 左開き
   bool _isRightSwipe = true;
   bool _showUI = true;
 
@@ -48,7 +48,6 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(initialPage: _currentPage);
     _loadAndRenderPdf();
   }
 
@@ -93,23 +92,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
 
   void _goToPage(int pageIndex) {
     if (pageIndex >= 0 && pageIndex < _totalPages) {
-      _pageController.animateToPage(
-        pageIndex,
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOutCubic,
-      );
-    }
-  }
-
-  void _nextPage() {
-    if (_currentPage < _totalPages - 1) {
-      _goToPage(_currentPage + 1);
-    }
-  }
-
-  void _previousPage() {
-    if (_currentPage > 0) {
-      _goToPage(_currentPage - 1);
+      _controller.currentState?.goToPage(pageIndex);
     }
   }
 
@@ -151,7 +134,6 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
 
   @override
   void dispose() {
-    _pageController.dispose();
     _pdfDocument?.close();
     super.dispose();
   }
@@ -177,105 +159,63 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
               ? const Center(child: Text('PDFの読み込みに失敗しました。'))
               : Stack(
                   children: [
-                    PageView.builder(
-                      controller: _pageController,
-                      reverse: !_isRightSwipe,
-                      itemCount: _totalPages,
+                    // 立体カールエフェクトを提供する PageFlipWidget
+                    PageFlipWidget(
+                      key: _controller,
+                      backgroundColor: Colors.black,
+                      initialIndex: _currentPage,
+                      // 開き方向に応じたカール処理
+                      isRightSwipe: _isRightSwipe,
                       onPageChanged: (index) {
                         setState(() {
                           _currentPage = index;
                         });
                       },
-                      itemBuilder: (context, index) {
+                      children: List.generate(_totalPages, (index) {
                         final image = _pageImages[index];
                         if (image == null) return const SizedBox.shrink();
 
-                        return AnimatedBuilder(
-                          animation: _pageController,
-                          builder: (context, child) {
-                            double position = 0.0;
-                            if (_pageController.position.haveDimensions) {
-                              position = (index - (_pageController.page ?? 0));
-                            } else {
-                              position = (index - _currentPage).toDouble();
+                        return GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onTapUp: (details) {
+                            final touchX = details.globalPosition.dx;
+                            final leftZone = screenWidth * 0.3;
+                            final rightZone = screenWidth * 0.7;
+
+                            // 中央領域タップでUI表示トグル
+                            if (touchX >= leftZone && touchX <= rightZone) {
+                              setState(() {
+                                _showUI = !_showUI;
+                              });
+                              return;
                             }
 
-                            final isLeaving = position < 0;
-                            final shadowProgress =
-                                (1.0 - position.abs()).clamp(0.0, 1.0);
-
-                            return Stack(
-                              children: [
-                                child!,
-                                // めくり時の境目のグラデーション影
-                                if (position != 0)
-                                  Positioned(
-                                    top: 0,
-                                    bottom: 0,
-                                    left: isLeaving ? null : 0,
-                                    right: isLeaving ? 0 : null,
-                                    width: 30,
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        gradient: LinearGradient(
-                                          begin: isLeaving
-                                              ? Alignment.centerRight
-                                              : Alignment.centerLeft,
-                                          end: isLeaving
-                                              ? Alignment.centerLeft
-                                              : Alignment.centerRight,
-                                          colors: [
-                                            Colors.black.withOpacity(
-                                                0.35 * shadowProgress),
-                                            Colors.transparent,
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            );
+                            // タップでめくる動作
+                            if (_isRightSwipe) {
+                              if (touchX < leftZone) {
+                                _controller.currentState?.nextPage();
+                              } else if (touchX > rightZone) {
+                                _controller.currentState?.previousPage();
+                              }
+                            } else {
+                              if (touchX > rightZone) {
+                                _controller.currentState?.nextPage();
+                              } else if (touchX < leftZone) {
+                                _controller.currentState?.previousPage();
+                              }
+                            }
                           },
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.translucent,
-                            onTapUp: (details) {
-                              final touchX = details.globalPosition.dx;
-                              final leftZone = screenWidth * 0.3;
-                              final rightZone = screenWidth * 0.7;
-
-                              if (touchX >= leftZone && touchX <= rightZone) {
-                                setState(() {
-                                  _showUI = !_showUI;
-                                });
-                                return;
-                              }
-
-                              if (_isRightSwipe) {
-                                if (touchX < leftZone) {
-                                  _nextPage();
-                                } else {
-                                  _previousPage();
-                                }
-                              } else {
-                                if (touchX > rightZone) {
-                                  _nextPage();
-                                } else {
-                                  _previousPage();
-                                }
-                              }
-                            },
-                            child: Container(
-                              color: Colors.white,
-                              child: Center(
-                                child: Image.memory(
-                                  image.bytes,
-                                  fit: BoxFit.contain,
-                                ),
+                          child: Container(
+                            color: Colors.white,
+                            child: Center(
+                              child: Image.memory(
+                                image.bytes,
+                                fit: BoxFit.contain,
                               ),
                             ),
                           ),
                         );
-                      },
+                      }),
                     ),
 
                     // 上部ツールバー
