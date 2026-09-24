@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:page_flip/page_flip.dart';
+import 'package:page_turn/page_turn.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdfx/pdfx.dart';
 
@@ -31,7 +31,7 @@ class PageCurlReaderScreen extends StatefulWidget {
 }
 
 class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
-  final _controller = GlobalKey<PageFlipWidgetState>();
+  final _controller = GlobalKey<PageTurnState>();
   PdfDocument? _pdfDocument;
   List<PdfPageImage?> _pageImages = [];
   bool _isLoading = true;
@@ -161,11 +161,17 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
               ? const Center(child: Text('PDFの読み込みに失敗しました。'))
               : Stack(
                   children: [
-                    // エラーが出ないように調整した PageFlipWidget
-                    PageFlipWidget(
+                    // 高精細なカールアニメーションを提供する PageTurn
+                    PageTurn(
                       key: _controller,
-                      backgroundColor: Colors.black,
-                      initialIndex: _currentPage,
+                      backgroundColor: const Color(0xFF151515),
+                      showBackSide: true, // めくった紙の裏側を再現
+                      lastPage: const Center(
+                        child: Text(
+                          '最後のページです',
+                          style: TextStyle(color: Colors.white, fontSize: 18),
+                        ),
+                      ),
                       children: List.generate(_totalPages, (index) {
                         final image = _pageImages[index];
                         if (image == null) return const SizedBox.shrink();
@@ -177,7 +183,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                             final leftZone = screenWidth * 0.3;
                             final rightZone = screenWidth * 0.7;
 
-                            // 中央タップでUI表示トグル
+                            // 中央領域タップでUI表示トグル
                             if (touchX >= leftZone && touchX <= rightZone) {
                               setState(() {
                                 _showUI = !_showUI;
@@ -188,24 +194,24 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                             // タップめくり処理
                             if (_isRightSwipe) {
                               if (touchX < leftZone) {
-                                _controller.currentState?.nextPage();
+                                _controller.currentState?.next();
                                 if (_currentPage < _totalPages - 1) {
                                   setState(() => _currentPage++);
                                 }
                               } else if (touchX > rightZone) {
-                                _controller.currentState?.previousPage();
+                                _controller.currentState?.previous();
                                 if (_currentPage > 0) {
                                   setState(() => _currentPage--);
                                 }
                               }
                             } else {
                               if (touchX > rightZone) {
-                                _controller.currentState?.nextPage();
+                                _controller.currentState?.next();
                                 if (_currentPage < _totalPages - 1) {
                                   setState(() => _currentPage++);
                                 }
                               } else if (touchX < leftZone) {
-                                _controller.currentState?.previousPage();
+                                _controller.currentState?.previous();
                                 if (_currentPage > 0) {
                                   setState(() => _currentPage--);
                                 }
@@ -293,7 +299,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                       right: 0,
                       child: Container(
                         color: Colors.black.withOpacity(0.85),
-                        padding: const EdgeInsets.symmetric(
+                        padding: const TextStyle(
                           horizontal: 16,
                           vertical: 8,
                         ),
