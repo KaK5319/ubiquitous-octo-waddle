@@ -1,7 +1,7 @@
 import 'dart:io';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:page_turn/page_turn.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdfx/pdfx.dart';
 
@@ -10,7 +10,7 @@ void main() {
 }
 
 class SideBooksApp extends StatelessWidget {
-  const SideBooksApp({Key? key}) : super(key: key);
+  const SideBooksApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -18,29 +18,28 @@ class SideBooksApp extends StatelessWidget {
       title: 'SideBooks Style Reader',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(),
-      home: const CustomCurlReaderScreen(),
+      home: const PageCurlReaderScreen(),
     );
   }
 }
 
-class CustomCurlReaderScreen extends StatefulWidget {
-  const CustomCurlReaderScreen({Key? key}) : super(key: key);
+class PageCurlReaderScreen extends StatefulWidget {
+  const PageCurlReaderScreen({super.key});
 
   @override
-  State<CustomCurlReaderScreen> createState() => _CustomCurlReaderScreenState();
+  State<PageCurlReaderScreen> createState() => _PageCurlReaderScreenState();
 }
 
-class _CustomCurlReaderScreenState extends State<CustomCurlReaderScreen>
-    with SingleTickerProviderStateMixin {
+class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
+  final _controller = GlobalKey<PageTurnState>();
   PdfDocument? _pdfDocument;
-  List<ui.Image> _decodedImages = [];
+  List<PdfPageImage?> _pageImages = [];
   bool _isLoading = true;
   int _totalPages = 0;
   int _currentPage = 0;
 
-  late AnimationController _animController;
-  double _dragProgress = 0.0;
-  bool _isDragging = false;
+  bool _isRightSwipe = true;
+  bool _showUI = true;
 
   final String _samplePdfUrl =
       'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf';
@@ -48,15 +47,6 @@ class _CustomCurlReaderScreenState extends State<CustomCurlReaderScreen>
   @override
   void initState() {
     super.initState();
-    _animController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    )..addListener(() {
-        setState(() {
-          _dragProgress = _animController.value;
-        });
-      });
-
     _loadAndRenderPdf();
   }
 
@@ -64,12 +54,12 @@ class _CustomCurlReaderScreenState extends State<CustomCurlReaderScreen>
     try {
       final response = await http.get(Uri.parse(_samplePdfUrl));
       final dir = await getApplicationDocumentsDirectory();
-      final file = File('${dir.path}/curl_sample_v3.pdf');
+      final file = File('${dir.path}/curl_sample.pdf');
       await file.writeAsBytes(response.bodyBytes, flush: true);
 
       final doc = await PdfDocument.openFile(file.path);
       final count = doc.pagesCount;
-      List<ui.Image> images = [];
+      List<PdfPageImage?> images = [];
 
       for (int i = 1; i <= count; i++) {
         final page = await doc.getPage(i);
@@ -79,19 +69,14 @@ class _CustomCurlReaderScreenState extends State<CustomCurlReaderScreen>
           format: PdfPageImageFormat.jpeg,
         );
         await page.close();
-
-        if (pageImage != null) {
-          final codec = await ui.instantiateImageCodec(pageImage.bytes);
-          final frame = await codec.getNextFrame();
-          images.add(frame.image);
-        }
+        images.add(pageImage);
       }
 
       if (mounted) {
         setState(() {
           _pdfDocument = doc;
           _totalPages = count;
-          _decodedImages = images;
+          _pageImages = images;
           _isLoading = false;
         });
       }
@@ -104,47 +89,55 @@ class _CustomCurlReaderScreenState extends State<CustomCurlReaderScreen>
     }
   }
 
+  void _goToPage(int pageIndex) {
+    if (pageIndex >= 0 && pageIndex < _totalPages) {
+      _controller.currentState?.goToPage(pageIndex);
+      setState(() {
+        _currentPage = pageIndex;
+      });
+    }
+  }
+
+  void _showPageJumpDialog() {
+    final textController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('ページ指定移動'),
+          content: TextField(
+            controller: textController,
+            keyboardType: TextInputType.number,
+            autofocus: true,
+            decoration: InputDecoration(
+              hintText: '1 ～ $_totalPages の数字を入力',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('キャンセル'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final pageNum = int.tryParse(textController.text);
+                if (pageNum != null && pageNum >= 1 && pageNum <= _totalPages) {
+                  _goToPage(pageNum - 1);
+                  Navigator.pop(context);
+                }
+              },
+              child: const Text('移動'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   void dispose() {
-    _animController.dispose();
     _pdfDocument?.close();
     super.dispose();
-  }
-
-  void _onHorizontalDragUpdate(DragUpdateDetails details, double screenWidth) {
-    if (_animController.isAnimating) return;
-    _isDragging = true;
-    
-    // 左スワイプ（←）でめくる
-    final delta = -details.primaryDelta! / screenWidth;
-    if (_currentPage < _totalPages - 1) {
-      setState(() {
-        _dragProgress = (_dragProgress + delta).clamp(0.0, 1.0);
-      });
-    }
-  }
-
-  void _onHorizontalDragEnd(DragEndDetails details) {
-    if (!_isDragging) return;
-    _isDragging = false;
-
-    if (_dragProgress > 0.3) {
-      _animController.forward(from: _dragProgress).then((_) {
-        setState(() {
-          if (_currentPage < _totalPages - 1) {
-            _currentPage++;
-          }
-          _dragProgress = 0.0;
-          _animController.value = 0.0;
-        });
-      });
-    } else {
-      _animController.reverse(from: _dragProgress).then((_) {
-        setState(() {
-          _dragProgress = 0.0;
-        });
-      });
-    }
   }
 
   @override
@@ -152,15 +145,7 @@ class _CustomCurlReaderScreenState extends State<CustomCurlReaderScreen>
     final screenWidth = MediaQuery.of(context).size.width;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF181818),
-      appBar: AppBar(
-        backgroundColor: Colors.black.withOpacity(0.85),
-        title: Text(
-          _totalPages > 0 ? '${_currentPage + 1} / $_totalPages ページ' : '読み込み中...',
-          style: const TextStyle(fontSize: 16),
-        ),
-        centerTitle: true,
-      ),
+      backgroundColor: const Color(0xFF151515),
       body: _isLoading
           ? const Center(
               child: Column(
@@ -168,98 +153,174 @@ class _CustomCurlReaderScreenState extends State<CustomCurlReaderScreen>
                 children: [
                   CircularProgressIndicator(color: Colors.white),
                   SizedBox(height: 16),
-                  Text('PDFを構築中...'),
+                  Text('PDFを読み込み中...'),
                 ],
               ),
             )
-          : GestureDetector(
-              onHorizontalDragUpdate: (details) =>
-                  _onHorizontalDragUpdate(details, screenWidth),
-              onHorizontalDragEnd: _onHorizontalDragEnd,
-              child: CustomPaint(
-                size: Size.infinite,
-                painter: PageCurlPainter(
-                  currentPageImage: _currentPage < _decodedImages.length
-                      ? _decodedImages[_currentPage]
-                      : null,
-                  nextPageImage: (_currentPage + 1) < _decodedImages.length
-                      ? _decodedImages[_currentPage + 1]
-                      : null,
-                  progress: _dragProgress,
+          : _pageImages.isEmpty
+              ? const Center(child: Text('PDFの読み込みに失敗しました。'))
+              : Stack(
+                  children: [
+                    // 高精細なカールアニメーションを提供する PageTurn
+                    PageTurn(
+                      key: _controller,
+                      backgroundColor: const Color(0xFF151515),
+                      showBackSide: true, // めくった紙の裏側を再現
+                      lastPage: const Center(
+                        child: Text(
+                          '最後のページです',
+                          style: TextStyle(color: Colors.white, fontSize: 18),
+                        ),
+                      ),
+                      children: List.generate(_totalPages, (index) {
+                        final image = _pageImages[index];
+                        if (image == null) return const SizedBox.shrink();
+
+                        return GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onTapUp: (details) {
+                            final touchX = details.globalPosition.dx;
+                            final leftZone = screenWidth * 0.3;
+                            final rightZone = screenWidth * 0.7;
+
+                            // 中央領域タップでUI表示トグル
+                            if (touchX >= leftZone && touchX <= rightZone) {
+                              setState(() {
+                                _showUI = !_showUI;
+                              });
+                              return;
+                            }
+
+                            // タップめくり処理
+                            if (_isRightSwipe) {
+                              if (touchX < leftZone) {
+                                _controller.currentState?.next();
+                                if (_currentPage < _totalPages - 1) {
+                                  setState(() => _currentPage++);
+                                }
+                              } else if (touchX > rightZone) {
+                                _controller.currentState?.previous();
+                                if (_currentPage > 0) {
+                                  setState(() => _currentPage--);
+                                }
+                              }
+                            } else {
+                              if (touchX > rightZone) {
+                                _controller.currentState?.next();
+                                if (_currentPage < _totalPages - 1) {
+                                  setState(() => _currentPage++);
+                                }
+                              } else if (touchX < leftZone) {
+                                _controller.currentState?.previous();
+                                if (_currentPage > 0) {
+                                  setState(() => _currentPage--);
+                                }
+                              }
+                            }
+                          },
+                          child: Container(
+                            color: Colors.white,
+                            child: Center(
+                              child: Image.memory(
+                                image.bytes,
+                                fit: BoxFit.contain,
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+
+                    // 上部ツールバー
+                    AnimatedPositioned(
+                      duration: const Duration(milliseconds: 200),
+                      top: _showUI ? 0 : -100,
+                      left: 0,
+                      right: 0,
+                      child: Container(
+                        padding: EdgeInsets.only(
+                          top: MediaQuery.of(context).padding.top,
+                        ),
+                        color: Colors.black.withOpacity(0.85),
+                        child: SizedBox(
+                          height: kToolbarHeight,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const SizedBox(width: 80),
+                              GestureDetector(
+                                onTap: _totalPages > 0
+                                    ? _showPageJumpDialog
+                                    : null,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      _totalPages > 0
+                                          ? '${_currentPage + 1} / $_totalPages ページ'
+                                          : '読み込み中...',
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    if (_totalPages > 0)
+                                      const Icon(Icons.arrow_drop_down,
+                                          color: Colors.white, size: 20),
+                                  ],
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _isRightSwipe = !_isRightSwipe;
+                                  });
+                                },
+                                child: Text(
+                                  _isRightSwipe ? '→ 右開き' : '← 左開き',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // 下部シークバー
+                    AnimatedPositioned(
+                      duration: const Duration(milliseconds: 200),
+                      bottom: _showUI ? 0 : -100,
+                      left: 0,
+                      right: 0,
+                      child: Container(
+                        color: Colors.black.withOpacity(0.85),
+                        padding: const TextStyle(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        child: SafeArea(
+                          top: false,
+                          child: Slider(
+                            value: _currentPage.toDouble(),
+                            min: 0,
+                            max: (_totalPages - 1).toDouble(),
+                            divisions: _totalPages > 1 ? _totalPages - 1 : 1,
+                            activeColor: Colors.blueAccent,
+                            inactiveColor: Colors.white24,
+                            onChanged: (double value) {
+                              _goToPage(value.round());
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ),
     );
-  }
-}
-
-class PageCurlPainter extends CustomPainter {
-  final ui.Image? currentPageImage;
-  final ui.Image? nextPageImage;
-  final double progress;
-
-  PageCurlPainter({
-    required this.currentPageImage,
-    required this.nextPageImage,
-    required this.progress,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint();
-
-    // 1. 次のページを描画 (背面)
-    if (nextPageImage != null) {
-      _drawImageFit(canvas, size, nextPageImage!, paint);
-    }
-
-    if (currentPageImage == null) return;
-
-    // めくられていない状態なら通常描画
-    if (progress <= 0.0) {
-      _drawImageFit(canvas, size, currentPageImage!, paint);
-      return;
-    }
-
-    // 2. 現在のページ（クリップしてめくり効果を演出）
-    final curlX = size.width * (1.0 - progress);
-
-    canvas.save();
-    canvas.clipRect(Rect.fromLTRB(0, 0, curlX, size.height));
-    _drawImageFit(canvas, size, currentPageImage!, paint);
-    canvas.restore();
-
-    // 3. めくれ目のカール影（立体グラデーション）
-    final shadowWidth = 40.0;
-    final shadowPaint = Paint()
-      ..shader = ui.Gradient.linear(
-        Offset(curlX - shadowWidth, 0),
-        Offset(curlX + shadowWidth / 2, 0),
-        [
-          Colors.transparent,
-          Colors.black.withOpacity(0.4),
-          Colors.black.withOpacity(0.1),
-          Colors.transparent,
-        ],
-        [0.0, 0.6, 0.85, 1.0],
-      );
-
-    canvas.drawRect(
-      Rect.fromLTRB(curlX - shadowWidth, 0, curlX + shadowWidth / 2, size.height),
-      shadowPaint,
-    );
-  }
-
-  void _drawImageFit(Canvas canvas, Size size, ui.Image image, Paint paint) {
-    final src = Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble());
-    final dst = Rect.fromLTWH(0, 0, size.width, size.height);
-    canvas.drawImageRect(image, src, dst, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant PageCurlPainter oldDelegate) {
-    return oldDelegate.progress != progress ||
-        oldDelegate.currentPageImage != currentPageImage ||
-        oldDelegate.nextPageImage != nextPageImage;
   }
 }
