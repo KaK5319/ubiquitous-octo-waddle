@@ -38,7 +38,6 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
   int _totalPages = 0;
   int _currentPage = 0;
 
-  // true: 右開き（日本語本・漫画など） / false: 左開き
   bool _isRightSwipe = true;
   bool _showUI = true;
 
@@ -93,6 +92,9 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
   void _goToPage(int pageIndex) {
     if (pageIndex >= 0 && pageIndex < _totalPages) {
       _controller.currentState?.goToPage(pageIndex);
+      setState(() {
+        _currentPage = pageIndex;
+      });
     }
   }
 
@@ -159,18 +161,11 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
               ? const Center(child: Text('PDFの読み込みに失敗しました。'))
               : Stack(
                   children: [
-                    // 立体カールエフェクトを提供する PageFlipWidget
+                    // エラーが出ないように調整した PageFlipWidget
                     PageFlipWidget(
                       key: _controller,
                       backgroundColor: Colors.black,
                       initialIndex: _currentPage,
-                      // 開き方向に応じたカール処理
-                      isRightSwipe: _isRightSwipe,
-                      onPageChanged: (index) {
-                        setState(() {
-                          _currentPage = index;
-                        });
-                      },
                       children: List.generate(_totalPages, (index) {
                         final image = _pageImages[index];
                         if (image == null) return const SizedBox.shrink();
@@ -182,7 +177,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                             final leftZone = screenWidth * 0.3;
                             final rightZone = screenWidth * 0.7;
 
-                            // 中央領域タップでUI表示トグル
+                            // 中央タップでUI表示トグル
                             if (touchX >= leftZone && touchX <= rightZone) {
                               setState(() {
                                 _showUI = !_showUI;
@@ -190,18 +185,30 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                               return;
                             }
 
-                            // タップでめくる動作
+                            // タップめくり処理
                             if (_isRightSwipe) {
                               if (touchX < leftZone) {
                                 _controller.currentState?.nextPage();
+                                if (_currentPage < _totalPages - 1) {
+                                  setState(() => _currentPage++);
+                                }
                               } else if (touchX > rightZone) {
                                 _controller.currentState?.previousPage();
+                                if (_currentPage > 0) {
+                                  setState(() => _currentPage--);
+                                }
                               }
                             } else {
                               if (touchX > rightZone) {
                                 _controller.currentState?.nextPage();
+                                if (_currentPage < _totalPages - 1) {
+                                  setState(() => _currentPage++);
+                                }
                               } else if (touchX < leftZone) {
                                 _controller.currentState?.previousPage();
+                                if (_currentPage > 0) {
+                                  setState(() => _currentPage--);
+                                }
                               }
                             }
                           },
