@@ -15,7 +15,7 @@ dependencies:
   http: ^1.2.0
   path_provider: ^2.1.2
   pdfx: ^2.6.0
-  page_turn: ^0.1.2  # ← より立体的なカール表現が可能なパッケージに変更
+  page_flip: ^0.2.1  # ← page_turn からビルド可能な page_flip に変更
 
   cupertino_icons: ^1.0.6
 
