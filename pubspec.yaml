@@ -1,5 +1,5 @@
-name: sidebooks_app
-description: "A new Flutter project for SideBooks style reader."
+name: pdf_reader_app
+description: "A new Flutter project with page flip reader."
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -11,12 +11,12 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # ネットワーク・ファイル・PDF関連（すべてNull Safety対応・標準パッケージ）
+  # UI & PDF Dependencies
   http: ^1.2.0
   path_provider: ^2.1.2
   pdfx: ^2.6.0
+  page_flip: ^0.2.1
 
-  # デザイン用アイコン
   cupertino_icons: ^1.0.6
 
 dev_dependencies:
