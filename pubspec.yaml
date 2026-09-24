@@ -1,5 +1,5 @@
 name: pdf_reader_app
-description: "SideBooks style reader app"
+description: "A new Flutter project with realistic page turn reader."
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -11,9 +11,12 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # UI & PDF Dependencies
   http: ^1.2.0
   path_provider: ^2.1.2
   pdfx: ^2.6.0
+  page_turn: ^0.1.2  # ← より立体的なカール表現が可能なパッケージに変更
+
   cupertino_icons: ^1.0.6
 
 dev_dependencies:
