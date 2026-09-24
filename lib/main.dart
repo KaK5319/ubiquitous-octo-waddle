@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:page_turn/page_turn.dart';
+import 'package:page_flip/page_flip.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdfx/pdfx.dart';
 
@@ -10,7 +10,7 @@ void main() {
 }
 
 class SideBooksApp extends StatelessWidget {
-  const SideBooksApp({super.key});
+  const SideBooksApp({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -24,22 +24,18 @@ class SideBooksApp extends StatelessWidget {
 }
 
 class PageCurlReaderScreen extends StatefulWidget {
-  const PageCurlReaderScreen({super.key});
+  const PageCurlReaderScreen({Key? key}) : super(key: key);
 
   @override
   State<PageCurlReaderScreen> createState() => _PageCurlReaderScreenState();
 }
 
 class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
-  final _controller = GlobalKey<PageTurnState>();
+  final _controller = GlobalKey<PageFlipWidgetState>();
   PdfDocument? _pdfDocument;
   List<PdfPageImage?> _pageImages = [];
   bool _isLoading = true;
   int _totalPages = 0;
-  int _currentPage = 0;
-
-  bool _isRightSwipe = true;
-  bool _showUI = true;
 
   final String _samplePdfUrl =
       'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf';
@@ -89,51 +85,6 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
     }
   }
 
-  void _goToPage(int pageIndex) {
-    if (pageIndex >= 0 && pageIndex < _totalPages) {
-      _controller.currentState?.goToPage(pageIndex);
-      setState(() {
-        _currentPage = pageIndex;
-      });
-    }
-  }
-
-  void _showPageJumpDialog() {
-    final textController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('ページ指定移動'),
-          content: TextField(
-            controller: textController,
-            keyboardType: TextInputType.number,
-            autofocus: true,
-            decoration: InputDecoration(
-              hintText: '1 ～ $_totalPages の数字を入力',
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('キャンセル'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final pageNum = int.tryParse(textController.text);
-                if (pageNum != null && pageNum >= 1 && pageNum <= _totalPages) {
-                  _goToPage(pageNum - 1);
-                  Navigator.pop(context);
-                }
-              },
-              child: const Text('移動'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   @override
   void dispose() {
     _pdfDocument?.close();
@@ -142,10 +93,16 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-
     return Scaffold(
-      backgroundColor: const Color(0xFF151515),
+      backgroundColor: const Color(0xFF222222),
+      appBar: AppBar(
+        backgroundColor: Colors.black.withOpacity(0.8),
+        title: Text(
+          _totalPages > 0 ? '全 $_totalPages ページ' : '読み込み中...',
+          style: const TextStyle(fontSize: 16),
+        ),
+        centerTitle: true,
+      ),
       body: _isLoading
           ? const Center(
               child: Column(
@@ -153,173 +110,30 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                 children: [
                   CircularProgressIndicator(color: Colors.white),
                   SizedBox(height: 16),
-                  Text('PDFを読み込み中...'),
+                  Text('PDFをページめくり用に変換中...'),
                 ],
               ),
             )
           : _pageImages.isEmpty
               ? const Center(child: Text('PDFの読み込みに失敗しました。'))
-              : Stack(
-                  children: [
-                    // 高精細なカールアニメーションを提供する PageTurn
-                    PageTurn(
-                      key: _controller,
-                      backgroundColor: const Color(0xFF151515),
-                      showBackSide: true, // めくった紙の裏側を再現
-                      lastPage: const Center(
-                        child: Text(
-                          '最後のページです',
-                          style: TextStyle(color: Colors.white, fontSize: 18),
+              : PageFlipWidget(
+                  key: _controller,
+                  backgroundColor: const Color(0xFF222222),
+                  isRightSwipe: false,
+                  children: List.generate(_totalPages, (index) {
+                    final image = _pageImages[index];
+                    if (image == null) return const SizedBox.shrink();
+
+                    return Container(
+                      color: Colors.white,
+                      child: Center(
+                        child: Image.memory(
+                          image.bytes,
+                          fit: BoxFit.contain,
                         ),
                       ),
-                      children: List.generate(_totalPages, (index) {
-                        final image = _pageImages[index];
-                        if (image == null) return const SizedBox.shrink();
-
-                        return GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onTapUp: (details) {
-                            final touchX = details.globalPosition.dx;
-                            final leftZone = screenWidth * 0.3;
-                            final rightZone = screenWidth * 0.7;
-
-                            // 中央領域タップでUI表示トグル
-                            if (touchX >= leftZone && touchX <= rightZone) {
-                              setState(() {
-                                _showUI = !_showUI;
-                              });
-                              return;
-                            }
-
-                            // タップめくり処理
-                            if (_isRightSwipe) {
-                              if (touchX < leftZone) {
-                                _controller.currentState?.next();
-                                if (_currentPage < _totalPages - 1) {
-                                  setState(() => _currentPage++);
-                                }
-                              } else if (touchX > rightZone) {
-                                _controller.currentState?.previous();
-                                if (_currentPage > 0) {
-                                  setState(() => _currentPage--);
-                                }
-                              }
-                            } else {
-                              if (touchX > rightZone) {
-                                _controller.currentState?.next();
-                                if (_currentPage < _totalPages - 1) {
-                                  setState(() => _currentPage++);
-                                }
-                              } else if (touchX < leftZone) {
-                                _controller.currentState?.previous();
-                                if (_currentPage > 0) {
-                                  setState(() => _currentPage--);
-                                }
-                              }
-                            }
-                          },
-                          child: Container(
-                            color: Colors.white,
-                            child: Center(
-                              child: Image.memory(
-                                image.bytes,
-                                fit: BoxFit.contain,
-                              ),
-                            ),
-                          ),
-                        );
-                      }),
-                    ),
-
-                    // 上部ツールバー
-                    AnimatedPositioned(
-                      duration: const Duration(milliseconds: 200),
-                      top: _showUI ? 0 : -100,
-                      left: 0,
-                      right: 0,
-                      child: Container(
-                        padding: EdgeInsets.only(
-                          top: MediaQuery.of(context).padding.top,
-                        ),
-                        color: Colors.black.withOpacity(0.85),
-                        child: SizedBox(
-                          height: kToolbarHeight,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const SizedBox(width: 80),
-                              GestureDetector(
-                                onTap: _totalPages > 0
-                                    ? _showPageJumpDialog
-                                    : null,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      _totalPages > 0
-                                          ? '${_currentPage + 1} / $_totalPages ページ'
-                                          : '読み込み中...',
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                    if (_totalPages > 0)
-                                      const Icon(Icons.arrow_drop_down,
-                                          color: Colors.white, size: 20),
-                                  ],
-                                ),
-                              ),
-                              TextButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _isRightSwipe = !_isRightSwipe;
-                                  });
-                                },
-                                child: Text(
-                                  _isRightSwipe ? '→ 右開き' : '← 左開き',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // 下部シークバー
-                    AnimatedPositioned(
-                      duration: const Duration(milliseconds: 200),
-                      bottom: _showUI ? 0 : -100,
-                      left: 0,
-                      right: 0,
-                      child: Container(
-                        color: Colors.black.withOpacity(0.85),
-                        padding: const TextStyle(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        child: SafeArea(
-                          top: false,
-                          child: Slider(
-                            value: _currentPage.toDouble(),
-                            min: 0,
-                            max: (_totalPages - 1).toDouble(),
-                            divisions: _totalPages > 1 ? _totalPages - 1 : 1,
-                            activeColor: Colors.blueAccent,
-                            inactiveColor: Colors.white24,
-                            onChanged: (double value) {
-                              _goToPage(value.round());
-                            },
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                    );
+                  }),
                 ),
     );
   }
