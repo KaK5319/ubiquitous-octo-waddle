@@ -1,9 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:page_turn/page_turn.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdfx/pdfx.dart';
+import 'package:turnable_page/turnable_page.dart';
 
 void main() {
   runApp(const SideBooksApp());
@@ -31,7 +31,7 @@ class PageCurlReaderScreen extends StatefulWidget {
 }
 
 class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
-  final _controller = GlobalKey<PageTurnState>();
+  late TurnablePageController _turnableController;
   PdfDocument? _pdfDocument;
   List<PdfPageImage?> _pageImages = [];
   bool _isLoading = true;
@@ -47,6 +47,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
   @override
   void initState() {
     super.initState();
+    _turnableController = TurnablePageController();
     _loadAndRenderPdf();
   }
 
@@ -91,7 +92,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
 
   void _goToPage(int pageIndex) {
     if (pageIndex >= 0 && pageIndex < _totalPages) {
-      _controller.currentState?.goToPage(pageIndex);
+      _turnableController.flipToPage(pageIndex);
       setState(() {
         _currentPage = pageIndex;
       });
@@ -136,6 +137,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
 
   @override
   void dispose() {
+    _turnableController.dispose();
     _pdfDocument?.close();
     super.dispose();
   }
@@ -161,18 +163,17 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
               ? const Center(child: Text('PDFの読み込みに失敗しました。'))
               : Stack(
                   children: [
-                    // 高精細なカールアニメーションを提供する PageTurn
-                    PageTurn(
-                      key: _controller,
-                      backgroundColor: const Color(0xFF151515),
-                      showBackSide: true, // めくった紙の裏側を再現
-                      lastPage: const Center(
-                        child: Text(
-                          '最後のページです',
-                          style: TextStyle(color: Colors.white, fontSize: 18),
-                        ),
-                      ),
-                      children: List.generate(_totalPages, (index) {
+                    // 高精細なカールアニメーションを提供する TurnablePage
+                    TurnablePage(
+                      controller: _turnableController,
+                      pageCount: _totalPages,
+                      pageViewMode: PageViewMode.single,
+                      onPageChanged: (index) {
+                        setState(() {
+                          _currentPage = index;
+                        });
+                      },
+                      builder: (context, index, constraints) {
                         final image = _pageImages[index];
                         if (image == null) return const SizedBox.shrink();
 
@@ -183,7 +184,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                             final leftZone = screenWidth * 0.3;
                             final rightZone = screenWidth * 0.7;
 
-                            // 中央領域タップでUI表示トグル
+                            // 中央領域タップでUI表示切替
                             if (touchX >= leftZone && touchX <= rightZone) {
                               setState(() {
                                 _showUI = !_showUI;
@@ -194,27 +195,15 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                             // タップめくり処理
                             if (_isRightSwipe) {
                               if (touchX < leftZone) {
-                                _controller.currentState?.next();
-                                if (_currentPage < _totalPages - 1) {
-                                  setState(() => _currentPage++);
-                                }
+                                _turnableController.flipNext();
                               } else if (touchX > rightZone) {
-                                _controller.currentState?.previous();
-                                if (_currentPage > 0) {
-                                  setState(() => _currentPage--);
-                                }
+                                _turnableController.flipPrev();
                               }
                             } else {
                               if (touchX > rightZone) {
-                                _controller.currentState?.next();
-                                if (_currentPage < _totalPages - 1) {
-                                  setState(() => _currentPage++);
-                                }
+                                _turnableController.flipNext();
                               } else if (touchX < leftZone) {
-                                _controller.currentState?.previous();
-                                if (_currentPage > 0) {
-                                  setState(() => _currentPage--);
-                                }
+                                _turnableController.flipPrev();
                               }
                             }
                           },
@@ -228,7 +217,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                             ),
                           ),
                         );
-                      }),
+                      },
                     ),
 
                     // 上部ツールバー
@@ -299,7 +288,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                       right: 0,
                       child: Container(
                         color: Colors.black.withOpacity(0.85),
-                        padding: const TextStyle(
+                        padding: const EdgeInsets.symmetric(
                           horizontal: 16,
                           vertical: 8,
                         ),
@@ -308,7 +297,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                           child: Slider(
                             value: _currentPage.toDouble(),
                             min: 0,
-                            max: (_totalPages - 1).toDouble(),
+                            max: (_totalPages - 1).toDouble().clamp(0.0, double.infinity),
                             divisions: _totalPages > 1 ? _totalPages - 1 : 1,
                             activeColor: Colors.blueAccent,
                             inactiveColor: Colors.white24,
