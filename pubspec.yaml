@@ -11,7 +11,6 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # 必要なパッケージのみ指定
   http: ^1.2.0
   path_provider: ^2.1.2
   pdfx: ^2.6.0
