@@ -15,7 +15,7 @@ dependencies:
   http: ^1.2.0
   path_provider: ^2.1.2
   pdfx: ^2.6.0
-  page_turn: any  # ← バージョン競合を回避するため柔軟に指定
+  turnable_page: ^1.1.0  # ← Null Safety対応＆高品質な3Dめくりライブラリ
 
   cupertino_icons: ^1.0.6
 
