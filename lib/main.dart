@@ -63,9 +63,10 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
 
       for (int i = 1; i <= count; i++) {
         final page = await doc.getPage(i);
+        // 高解像度でレンダリング
         final pageImage = await page.render(
-          width: page.width * 2,
-          height: page.height * 2,
+          width: page.width * 3,
+          height: page.height * 3,
           format: PdfPageImageFormat.jpeg,
         );
         await page.close();
@@ -148,7 +149,6 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
 
   @override
   void dispose() {
-    // _pageFlipController は dispose() が不要なため呼び出しを削除しています
     _pdfDocument?.close();
     super.dispose();
   }
@@ -158,7 +158,8 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
     final screenWidth = MediaQuery.of(context).size.width;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF151515),
+      // 本棚・デスク風の背景色に変更（SideBooksに近い落ち着いた暗色）
+      backgroundColor: const Color(0xFF1E1E1E),
       body: _isLoading
           ? const Center(
               child: Column(
@@ -219,18 +220,20 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                           },
                           child: Container(
                             color: Colors.white,
-                            child: Center(
-                              child: Image.memory(
-                                image.bytes,
-                                fit: BoxFit.contain,
-                              ),
+                            width: double.infinity,
+                            height: double.infinity,
+                            child: Image.memory(
+                              image.bytes,
+                              // BoxFit.fitWidth にすることで横幅いっぱいに拡大し、画面を大きく活用します
+                              fit: BoxFit.fitWidth,
+                              alignment: Alignment.topCenter,
                             ),
                           ),
                         );
                       },
                     ),
 
-                    // 上部ツールバー
+                    // 上部ツールバー（半透明）
                     AnimatedPositioned(
                       duration: const Duration(milliseconds: 200),
                       top: _showUI ? 0 : -100,
@@ -240,7 +243,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                         padding: EdgeInsets.only(
                           top: MediaQuery.of(context).padding.top,
                         ),
-                        color: Colors.black.withOpacity(0.85),
+                        color: Colors.black.withOpacity(0.7),
                         child: SizedBox(
                           height: kToolbarHeight,
                           child: Row(
@@ -290,14 +293,14 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                       ),
                     ),
 
-                    // 下部シークバー
+                    // 下部シークバー（半透明）
                     AnimatedPositioned(
                       duration: const Duration(milliseconds: 200),
                       bottom: _showUI ? 0 : -100,
                       left: 0,
                       right: 0,
                       child: Container(
-                        color: Colors.black.withOpacity(0.85),
+                        color: Colors.black.withOpacity(0.7),
                         padding: const EdgeInsets.symmetric(
                           horizontal: 16,
                           vertical: 8,
