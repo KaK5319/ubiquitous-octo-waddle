@@ -31,7 +31,6 @@ class PageCurlReaderScreen extends StatefulWidget {
 }
 
 class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
-  // turnable_page 専用の PageFlipController を宣言
   final PageFlipController _pageFlipController = PageFlipController();
   PdfDocument? _pdfDocument;
   List<PdfPageImage?> _pageImages = [];
@@ -149,7 +148,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
 
   @override
   void dispose() {
-    _pageFlipController.dispose();
+    // _pageFlipController は dispose() が不要なため呼び出しを削除しています
     _pdfDocument?.close();
     super.dispose();
   }
