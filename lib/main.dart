@@ -63,6 +63,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
 
       for (int i = 1; i <= count; i++) {
         final page = await doc.getPage(i);
+        // 画質向上のため3倍でレンダリング
         final pageImage = await page.render(
           width: page.width * 3,
           height: page.height * 3,
@@ -158,7 +159,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
     final screenHeight = MediaQuery.of(context).size.height;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF151515),
+      backgroundColor: Colors.black,
       body: _isLoading
           ? const Center(
               child: Column(
@@ -174,7 +175,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
               ? const Center(child: Text('PDFの読み込みに失敗しました。'))
               : Stack(
                   children: [
-                    // SizedBox.expand で TurnablePage 自体を画面全体のサイズに強制固定
+                    // 画面全体にめくりコンテナを配置
                     SizedBox.expand(
                       child: TurnablePage(
                         controller: _pageFlipController,
@@ -196,7 +197,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                               final leftZone = screenWidth * 0.3;
                               final rightZone = screenWidth * 0.7;
 
-                              // 中央タップでUI切替
+                              // 中央タップでUI表示切替
                               if (touchX >= leftZone && touchX <= rightZone) {
                                 setState(() {
                                   _showUI = !_showUI;
@@ -204,7 +205,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                                 return;
                               }
 
-                              // タップめくり処理
+                              // タップでめくる処理
                               if (_isRightSwipe) {
                                 if (touchX < leftZone) {
                                   _nextPage();
@@ -224,8 +225,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                               height: screenHeight,
                               child: Image.memory(
                                 image.bytes,
-                                // 画面いっぱいに無理なくフィットさせる場合: BoxFit.fill
-                                // ※ 縦横比を崩さず上下左右の隙間を完全に埋めたい場合は BoxFit.cover に変更可能です
+                                // 画面いっぱいに余白なく全画面でFitさせる設定
                                 fit: BoxFit.fill,
                               ),
                             ),
@@ -234,7 +234,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                       ),
                     ),
 
-                    // 上部ツールバー（半透明 overlay）
+                    // 上部ツールバー（半透明）
                     AnimatedPositioned(
                       duration: const Duration(milliseconds: 200),
                       top: _showUI ? 0 : -100,
@@ -294,7 +294,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                       ),
                     ),
 
-                    // 下部シークバー（半透明 overlay）
+                    // 下部シークバー（半透明）
                     AnimatedPositioned(
                       duration: const Duration(milliseconds: 200),
                       bottom: _showUI ? 0 : -100,
@@ -302,7 +302,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                       right: 0,
                       child: Container(
                         color: Colors.black.withOpacity(0.75),
-                        padding: const EdgeInsets.symmetric(
+                        padding: const TextStyle(
                           horizontal: 16,
                           vertical: 8,
                         ),
