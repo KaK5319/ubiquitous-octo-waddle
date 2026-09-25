@@ -31,8 +31,8 @@ class PageCurlReaderScreen extends StatefulWidget {
 }
 
 class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
-  // TurnablePage では Flutter標準の PageController を使用します
-  final PageController _pageController = PageController();
+  // turnable_page 専用の PageFlipController を宣言
+  final PageFlipController _pageFlipController = PageFlipController();
   PdfDocument? _pdfDocument;
   List<PdfPageImage?> _pageImages = [];
   bool _isLoading = true;
@@ -92,7 +92,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
 
   void _goToPage(int pageIndex) {
     if (pageIndex >= 0 && pageIndex < _totalPages) {
-      _pageController.jumpToPage(pageIndex);
+      _pageFlipController.jumpToPage(pageIndex);
       setState(() {
         _currentPage = pageIndex;
       });
@@ -101,19 +101,13 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
 
   void _nextPage() {
     if (_currentPage < _totalPages - 1) {
-      _pageController.nextPage(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
+      _pageFlipController.nextPage();
     }
   }
 
   void _previousPage() {
     if (_currentPage > 0) {
-      _pageController.previousPage(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
+      _pageFlipController.previousPage();
     }
   }
 
@@ -155,7 +149,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
 
   @override
   void dispose() {
-    _pageController.dispose();
+    _pageFlipController.dispose();
     _pdfDocument?.close();
     super.dispose();
   }
@@ -182,7 +176,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
               : Stack(
                   children: [
                     TurnablePage(
-                      controller: _pageController,
+                      controller: _pageFlipController,
                       pageCount: _totalPages,
                       pageViewMode: PageViewMode.single,
                       onPageChanged: (int? oldIndex, int newIndex) {
