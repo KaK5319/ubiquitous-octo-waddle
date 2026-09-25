@@ -31,7 +31,7 @@ class PageCurlReaderScreen extends StatefulWidget {
 }
 
 class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
-  late TurnablePageController _turnableController;
+  final TurnablePageController _turnableController = TurnablePageController();
   PdfDocument? _pdfDocument;
   List<PdfPageImage?> _pageImages = [];
   bool _isLoading = true;
@@ -47,7 +47,6 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
   @override
   void initState() {
     super.initState();
-    _turnableController = TurnablePageController();
     _loadAndRenderPdf();
   }
 
@@ -92,7 +91,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
 
   void _goToPage(int pageIndex) {
     if (pageIndex >= 0 && pageIndex < _totalPages) {
-      _turnableController.flipToPage(pageIndex);
+      _turnableController.jumpToPage(pageIndex);
       setState(() {
         _currentPage = pageIndex;
       });
@@ -137,7 +136,6 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
 
   @override
   void dispose() {
-    _turnableController.dispose();
     _pdfDocument?.close();
     super.dispose();
   }
@@ -163,14 +161,14 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
               ? const Center(child: Text('PDFの読み込みに失敗しました。'))
               : Stack(
                   children: [
-                    // 高精細なカールアニメーションを提供する TurnablePage
                     TurnablePage(
                       controller: _turnableController,
                       pageCount: _totalPages,
                       pageViewMode: PageViewMode.single,
-                      onPageChanged: (index) {
+                      // 旧・新の2つの引数を受け取るように型合わせ
+                      onPageChanged: (int? oldIndex, int newIndex) {
                         setState(() {
-                          _currentPage = index;
+                          _currentPage = newIndex;
                         });
                       },
                       builder: (context, index, constraints) {
@@ -184,7 +182,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                             final leftZone = screenWidth * 0.3;
                             final rightZone = screenWidth * 0.7;
 
-                            // 中央領域タップでUI表示切替
+                            // 中央タップでUI切替
                             if (touchX >= leftZone && touchX <= rightZone) {
                               setState(() {
                                 _showUI = !_showUI;
@@ -195,15 +193,15 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                             // タップめくり処理
                             if (_isRightSwipe) {
                               if (touchX < leftZone) {
-                                _turnableController.flipNext();
+                                _turnableController.nextPage();
                               } else if (touchX > rightZone) {
-                                _turnableController.flipPrev();
+                                _turnableController.previousPage();
                               }
                             } else {
                               if (touchX > rightZone) {
-                                _turnableController.flipNext();
+                                _turnableController.nextPage();
                               } else if (touchX < leftZone) {
-                                _turnableController.flipPrev();
+                                _turnableController.previousPage();
                               }
                             }
                           },
@@ -297,7 +295,9 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                           child: Slider(
                             value: _currentPage.toDouble(),
                             min: 0,
-                            max: (_totalPages - 1).toDouble().clamp(0.0, double.infinity),
+                            max: (_totalPages - 1)
+                                .toDouble()
+                                .clamp(0.0, double.infinity),
                             divisions: _totalPages > 1 ? _totalPages - 1 : 1,
                             activeColor: Colors.blueAccent,
                             inactiveColor: Colors.white24,
