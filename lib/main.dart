@@ -31,7 +31,8 @@ class PageCurlReaderScreen extends StatefulWidget {
 }
 
 class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
-  final TurnablePageController _turnableController = TurnablePageController();
+  // TurnablePage では Flutter標準の PageController を使用します
+  final PageController _pageController = PageController();
   PdfDocument? _pdfDocument;
   List<PdfPageImage?> _pageImages = [];
   bool _isLoading = true;
@@ -91,10 +92,28 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
 
   void _goToPage(int pageIndex) {
     if (pageIndex >= 0 && pageIndex < _totalPages) {
-      _turnableController.jumpToPage(pageIndex);
+      _pageController.jumpToPage(pageIndex);
       setState(() {
         _currentPage = pageIndex;
       });
+    }
+  }
+
+  void _nextPage() {
+    if (_currentPage < _totalPages - 1) {
+      _pageController.nextPage(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  void _previousPage() {
+    if (_currentPage > 0) {
+      _pageController.previousPage(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
     }
   }
 
@@ -136,6 +155,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
 
   @override
   void dispose() {
+    _pageController.dispose();
     _pdfDocument?.close();
     super.dispose();
   }
@@ -162,10 +182,9 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
               : Stack(
                   children: [
                     TurnablePage(
-                      controller: _turnableController,
+                      controller: _pageController,
                       pageCount: _totalPages,
                       pageViewMode: PageViewMode.single,
-                      // 旧・新の2つの引数を受け取るように型合わせ
                       onPageChanged: (int? oldIndex, int newIndex) {
                         setState(() {
                           _currentPage = newIndex;
@@ -193,15 +212,15 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                             // タップめくり処理
                             if (_isRightSwipe) {
                               if (touchX < leftZone) {
-                                _turnableController.nextPage();
+                                _nextPage();
                               } else if (touchX > rightZone) {
-                                _turnableController.previousPage();
+                                _previousPage();
                               }
                             } else {
                               if (touchX > rightZone) {
-                                _turnableController.nextPage();
+                                _nextPage();
                               } else if (touchX < leftZone) {
-                                _turnableController.previousPage();
+                                _previousPage();
                               }
                             }
                           },
