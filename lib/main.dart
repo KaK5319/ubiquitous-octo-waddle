@@ -63,7 +63,6 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
 
       for (int i = 1; i <= count; i++) {
         final page = await doc.getPage(i);
-        // 高解像度でレンダリング
         final pageImage = await page.render(
           width: page.width * 3,
           height: page.height * 3,
@@ -156,10 +155,10 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
 
     return Scaffold(
-      // 本棚・デスク風の背景色に変更（SideBooksに近い落ち着いた暗色）
-      backgroundColor: const Color(0xFF1E1E1E),
+      backgroundColor: const Color(0xFF151515),
       body: _isLoading
           ? const Center(
               child: Column(
@@ -175,65 +174,67 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
               ? const Center(child: Text('PDFの読み込みに失敗しました。'))
               : Stack(
                   children: [
-                    TurnablePage(
-                      controller: _pageFlipController,
-                      pageCount: _totalPages,
-                      pageViewMode: PageViewMode.single,
-                      onPageChanged: (int? oldIndex, int newIndex) {
-                        setState(() {
-                          _currentPage = newIndex;
-                        });
-                      },
-                      builder: (context, index, constraints) {
-                        final image = _pageImages[index];
-                        if (image == null) return const SizedBox.shrink();
+                    // SizedBox.expand で TurnablePage 自体を画面全体のサイズに強制固定
+                    SizedBox.expand(
+                      child: TurnablePage(
+                        controller: _pageFlipController,
+                        pageCount: _totalPages,
+                        pageViewMode: PageViewMode.single,
+                        onPageChanged: (int? oldIndex, int newIndex) {
+                          setState(() {
+                            _currentPage = newIndex;
+                          });
+                        },
+                        builder: (context, index, constraints) {
+                          final image = _pageImages[index];
+                          if (image == null) return const SizedBox.shrink();
 
-                        return GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onTapUp: (details) {
-                            final touchX = details.globalPosition.dx;
-                            final leftZone = screenWidth * 0.3;
-                            final rightZone = screenWidth * 0.7;
+                          return GestureDetector(
+                            behavior: HitTestBehavior.translucent,
+                            onTapUp: (details) {
+                              final touchX = details.globalPosition.dx;
+                              final leftZone = screenWidth * 0.3;
+                              final rightZone = screenWidth * 0.7;
 
-                            // 中央タップでUI切替
-                            if (touchX >= leftZone && touchX <= rightZone) {
-                              setState(() {
-                                _showUI = !_showUI;
-                              });
-                              return;
-                            }
-
-                            // タップめくり処理
-                            if (_isRightSwipe) {
-                              if (touchX < leftZone) {
-                                _nextPage();
-                              } else if (touchX > rightZone) {
-                                _previousPage();
+                              // 中央タップでUI切替
+                              if (touchX >= leftZone && touchX <= rightZone) {
+                                setState(() {
+                                  _showUI = !_showUI;
+                                });
+                                return;
                               }
-                            } else {
-                              if (touchX > rightZone) {
-                                _nextPage();
-                              } else if (touchX < leftZone) {
-                                _previousPage();
+
+                              // タップめくり処理
+                              if (_isRightSwipe) {
+                                if (touchX < leftZone) {
+                                  _nextPage();
+                                } else if (touchX > rightZone) {
+                                  _previousPage();
+                                }
+                              } else {
+                                if (touchX > rightZone) {
+                                  _nextPage();
+                                } else if (touchX < leftZone) {
+                                  _previousPage();
+                                }
                               }
-                            }
-                          },
-                          child: Container(
-                            color: Colors.white,
-                            width: double.infinity,
-                            height: double.infinity,
-                            child: Image.memory(
-                              image.bytes,
-                              // BoxFit.fitWidth にすることで横幅いっぱいに拡大し、画面を大きく活用します
-                              fit: BoxFit.fitWidth,
-                              alignment: Alignment.topCenter,
+                            },
+                            child: SizedBox(
+                              width: screenWidth,
+                              height: screenHeight,
+                              child: Image.memory(
+                                image.bytes,
+                                // 画面いっぱいに無理なくフィットさせる場合: BoxFit.fill
+                                // ※ 縦横比を崩さず上下左右の隙間を完全に埋めたい場合は BoxFit.cover に変更可能です
+                                fit: BoxFit.fill,
+                              ),
                             ),
-                          ),
-                        );
-                      },
+                          );
+                        },
+                      ),
                     ),
 
-                    // 上部ツールバー（半透明）
+                    // 上部ツールバー（半透明 overlay）
                     AnimatedPositioned(
                       duration: const Duration(milliseconds: 200),
                       top: _showUI ? 0 : -100,
@@ -243,7 +244,7 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                         padding: EdgeInsets.only(
                           top: MediaQuery.of(context).padding.top,
                         ),
-                        color: Colors.black.withOpacity(0.7),
+                        color: Colors.black.withOpacity(0.75),
                         child: SizedBox(
                           height: kToolbarHeight,
                           child: Row(
@@ -293,14 +294,14 @@ class _PageCurlReaderScreenState extends State<PageCurlReaderScreen> {
                       ),
                     ),
 
-                    // 下部シークバー（半透明）
+                    // 下部シークバー（半透明 overlay）
                     AnimatedPositioned(
                       duration: const Duration(milliseconds: 200),
                       bottom: _showUI ? 0 : -100,
                       left: 0,
                       right: 0,
                       child: Container(
-                        color: Colors.black.withOpacity(0.7),
+                        color: Colors.black.withOpacity(0.75),
                         padding: const EdgeInsets.symmetric(
                           horizontal: 16,
                           vertical: 8,
