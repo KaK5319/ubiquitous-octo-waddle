@@ -22,7 +22,7 @@ apply plugin: 'dev.flutter.flutter-gradle-plugin'
 
 android {
     namespace "com.example.ubiquitous_octo_waddle"
-    compileSdk 34
+    compileSdk 36
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
